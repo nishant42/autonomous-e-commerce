@@ -47,7 +47,7 @@ class HostedHandler(server.Handler):
         if path == '/api/code':
             return self.send_json({'error': 'Source inspection is available in the GitHub repository'}, 403)
         if path == '/api/public-config':
-            return self.send_json({'shop_url': os.environ['SHOP_PUBLIC_URL']})
+            return self.send_json({'shop_url': os.environ.get('SHOP_PUBLIC_URL', '')})
         return super().do_GET()
 
     def do_POST(self):
@@ -83,8 +83,12 @@ def main():
             raise SystemExit(key + ' must contain at least 16 characters')
     if os.environ['OPERATOR_PASSWORD'] == os.environ['VIEWER_PASSWORD']:
         raise SystemExit('Use different operator and recruiter passwords')
+    os.environ.setdefault('ENGINE_PUBLIC_URL', os.environ.get('RENDER_EXTERNAL_URL', ''))
     for key in ('SHOP_PUBLIC_URL', 'ENGINE_PUBLIC_URL'):
-        if urlsplit(os.environ.get(key, '')).scheme != 'https':
+        value = os.environ.get(key, '')
+        if key == 'SHOP_PUBLIC_URL' and not value:
+            continue  # Shop is wired after its own first deployment.
+        if urlsplit(value).scheme != 'https':
             raise SystemExit(key + ' must be an HTTPS URL')
     Path(server.db.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     server.ensure_db().close()
