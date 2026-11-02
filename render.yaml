@@ -13,7 +13,7 @@ services:
     runtime: node
     region: frankfurt
     plan: standard
-    buildCommand: cd shop && npm ci && npm run build --workspace=@dtc/backend
+    buildCommand: cd shop && npm ci --include=dev && npm run build --workspace=@dtc/backend
     startCommand: sh deployment/start-backend.sh
     healthCheckPath: /health
     envVars:
@@ -40,7 +40,7 @@ services:
     runtime: node
     region: frankfurt
     plan: starter
-    buildCommand: cd shop && npm ci && npm run build --workspace=@dtc/storefront
+    buildCommand: cd shop && npm ci --include=dev && npm run build --workspace=@dtc/storefront
     startCommand: sh deployment/start-storefront.sh
     healthCheckPath: /dk/store
     envVars:
