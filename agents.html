@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Hierarchy</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">02 · Agent hierarchy</div>
+<h1>Agents, sub-agents, and exactly what each may touch</h1>
+<p class="lede">Four levels. The owners set policy. The Control Tower supervises. Department supervisors route work. Specialist agents do narrow jobs, often with sub-agents such as extractors and verifiers. Every agent has a mandate, a tool allow-list, an action list with risk tiers, and a declared technique.</p>
+
+<div class="toc">
+  <a href="#tree">Hierarchy</a><a href="#legend">Legend</a><a href="#commerce">Commerce</a><a href="#demand">Demand & Inventory</a><a href="#procurement">Procurement</a><a href="#supplier">Supplier</a><a href="#logistics">Logistics</a><a href="#pricing">Pricing</a><a href="#marketing">Marketing</a><a href="#care">Customer Care</a><a href="#finance">Finance</a><a href="#control">Control Tower</a><a href="#contract">Agent contract</a>
+</div>
+
+<h2 id="tree">Hierarchy</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  OWN["L0 · Owners (human)<br/>policy · envelopes · T3"] --> CT["L1 · Control Tower<br/>Sentinel · Incident Commander · Auditor"]
+  CT --> S1["Commerce"] & S2["Demand & Inventory"] & S3["Procurement"] & S4["Supplier Mgmt"] & S5["Logistics"] & S6["Pricing"] & S7["Marketing"] & S8["Customer Care"] & S9["Finance"]
+  S1 --> A11["Order Orchestrator · Fraud Screening · Catalogue Agent"]
+  S2 --> A21["Forecasting (ML) · Demand Sensing (ML) · Replenishment Planner (rules+opt)"]
+  S3 --> A31["Procurement Agent (LLM)"] --> A311["PO Builder (det) · Buy Panel (LLM ×3 + synth) · Budget Checker"]
+  S4 --> A41["Supplier Liaison (LLM)"] --> A411["API/EDI adapters · Email agent · Portal RPA · Doc Extractor → Verifier"]
+  S5 --> A51["Inbound Coordinator · Node Allocation · Delivery Exceptions"]
+  S6 --> A61["Pricing Agent (ML+rules)"] --> A611["Price Guard (rules) · Promotion Planner · Competitor Monitor"]
+  S7 --> A71["Growth Strategist · Budget Allocator (bandit) · Creative Agent → Brand Guardian"]
+  S8 --> A81["Triage (small LLM)"] --> A82["Resolution Agent (LLM)"] --> A83["Refund Policy engine · Reply QA"]
+  S9 --> A91["Reconciliation · Accounts Payable · Cash & Budget · Close"]
+  classDef lvl fill:transparent,stroke-dasharray:4 3
+  class OWN,CT lvl
+</script>
+</div>
+<p class="caption">Figure 2.1: Agent hierarchy: L0 owners → L1 Control Tower → L2 department supervisors → L3 specialists and sub-agents (full detail in the tables below). Supervisors route work and start workflows. They do not hold business logic.</p>
+
+<div class="callout info"><span class="t">Why supervisors are thin</span>
+<p>A supervisor that "thinks" about the business becomes a single point of cognitive failure and is hard to evaluate. Here, supervisors map events to workflows and agents; that is mostly deterministic code with an LLM classifier for ambiguous inbound items such as an unlabelled supplier email. The domain knowledge lives in specialists that can be tested narrowly.</p></div>
+
+<h2 id="legend">Legend</h2>
+<p>
+  <span class="tag llm">LLM</span> language, ambiguity, unstructured input ·
+  <span class="tag ml">ML</span> statistical prediction ·
+  <span class="tag rules">Rules</span> policy / thresholds ·
+  <span class="tag wf">Workflow</span> durable multi-step process ·
+  <span class="tag det">Deterministic</span> plain code.
+  Action tiers: <strong>T0</strong> auto · <strong>T1</strong> auto + sampled audit · <strong>T2</strong> verifier / panel required · <strong>T3</strong> human exception.
+</p>
+
+<h2 id="commerce">Commerce & Orders</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools it can read</th><th>Actions it can propose (tier)</th><th>Technique</th></tr>
+<tr><td><strong>Order Orchestrator</strong></td><td>Runs each order through its lifecycle: payment → fraud → allocation → 3PL release → fulfilment events</td><td>Shopify orders, Stripe payment intents, ATP projection, fraud verdicts</td><td><code>ReleaseToFulfilment</code> (T0), <code>HoldOrder</code> (T0), <code>CancelUnpaidOrder</code> (T1)</td><td><span class="tag wf">Workflow</span> <span class="tag det">Det</span></td></tr>
+<tr><td><strong>Fraud Screening</strong></td><td>Scores orders; LLM reviews only the grey zone (address mismatch plus a plausible story)</td><td>Stripe Radar score, order history, customer entity graph, velocity counters</td><td><code>HoldOrder</code> (T0), <code>CancelOrder</code> for fraud (T2, verifier)</td><td><span class="tag ml">ML</span> <span class="tag rules">Rules</span> <span class="tag llm">LLM (grey zone)</span></td></tr>
+<tr><td><strong>Catalogue Agent</strong><br/><span class="muted">sub: Attribute Extractor, Content QA</span></td><td>Turns supplier product data (PDF lookbooks, spreadsheets) into clean listings: attributes, sizes, care, copy, SEO</td><td>Supplier files, DAM, existing catalogue, brand style guide (RAG)</td><td><code>UpsertDraftProduct</code> (T1), <code>PublishProduct</code> (T2: Content QA and brand check)</td><td><span class="tag llm">LLM</span> <span class="tag rules">Schema rules</span></td></tr>
+</table></div>
+
+<h2 id="demand">Demand Planning & Inventory</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools</th><th>Actions (tier)</th><th>Technique</th></tr>
+<tr><td><strong><a href="forecasting.html">Forecasting Agent</a></strong></td><td>Nightly hierarchical probabilistic forecasts (P10/P50/P90) per SKU × node for 26 weeks, with intraday re-forecasts triggered by events</td><td>Order history, calendar, promo and campaign plans, price history, weather/seasonality features, stock-outs (for censored-demand correction)</td><td><code>PublishForecast</code> (T0, gated by backtest-error thresholds)</td><td><span class="tag ml">ML</span> (gradient boosting + hierarchical reconciliation)</td></tr>
+<tr><td><strong>Demand Sensing</strong></td><td>Detects when actual sell-through departs from forecast (e.g. 3× velocity) and classifies the likely cause</td><td>Real-time order stream, traffic and conversion, campaign events, social mentions</td><td>Emits <code>demand.anomaly</code> events only (no side effects)</td><td><span class="tag ml">ML</span> (change-point / CUSUM) <span class="tag llm">LLM cause narrative</span></td></tr>
+<tr><td><strong>Inventory Position Service</strong></td><td>Computes on-hand, allocated, in-transit, on-order and available-to-promise per node</td><td>3PL WMS snapshots and movements, POs, ASNs, orders</td><td>Pushes stock to Shopify (T0), <code>stock.low</code> events</td><td><span class="tag det">Det</span> (not an agent: a service agents read)</td></tr>
+<tr><td><strong>Replenishment Planner</strong></td><td>Computes reorder point, safety stock and order-up-to quantity from forecast distribution, lead-time distribution and service-level target</td><td>Forecasts, supplier lead-time stats, MOQ / case pack, budgets</td><td><code>RecommendReorder</code> (T0: a recommendation, not a PO)</td><td><span class="tag rules">Rules</span> <span class="tag ml">Stochastic optimisation</span></td></tr>
+<tr><td><strong>Planner Explainer</strong></td><td>Writes a human-readable rationale for each recommendation, citing numbers returned by tools</td><td>Planner outputs (read-only)</td><td>None: annotation only</td><td><span class="tag llm">LLM</span></td></tr>
+</table></div>
+
+<h2 id="procurement">Procurement</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools</th><th>Actions (tier)</th><th>Technique</th></tr>
+<tr><td><strong>Procurement Agent</strong></td><td>Groups recommendations into supplier POs, trades off MOQ vs cash vs lead time, chooses expedite vs standard, and handles supplier counter-offers</td><td>Recommendations, supplier terms and price lists, budget position, open POs, scorecards</td><td><code>CreatePurchaseOrder</code> (T0 under €5k · T1 under €20k · T2 under €60k · T3 above), <code>AmendPO</code> (T1/T2), <code>CancelPO</code> (T2)</td><td><span class="tag llm">LLM</span> reasoning over <span class="tag det">Det</span> calculators</td></tr>
+<tr><td>↳ <strong>PO Builder</strong></td><td>Deterministically rounds to case packs, applies price list and incoterms, computes landed cost</td><td>Supplier price list, FX rates</td><td>Returns a draft PO to the agent</td><td><span class="tag det">Det</span></td></tr>
+<tr><td>↳ <strong>Buy Panel</strong></td><td>For T2 buys, three personas assess the PO independently (Demand Planner, CFO, Risk Officer) and a synthesiser returns approve / modify / escalate</td><td>Frozen "decision pack" (forecast, cover, cash, supplier risk)</td><td>Verdict only</td><td><span class="tag llm">LLM ×3 + synth</span></td></tr>
+<tr><td>↳ <strong>Budget Checker</strong></td><td>Checks open-to-buy and cash-runway rules</td><td>Finance budgets, cash forecast</td><td>Pass / fail with reason</td><td><span class="tag rules">Rules</span></td></tr>
+</table></div>
+
+<h2 id="supplier">Supplier Management</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools</th><th>Actions (tier)</th><th>Technique</th></tr>
+<tr><td><strong>Supplier Liaison</strong></td><td>Owns every supplier conversation: sends POs, chases acknowledgements, negotiates dates within limits, interprets replies</td><td>Supplier master, threads, contract terms (RAG), PO state</td><td><code>SendSupplierMessage</code> (T1; T2 when committing to price or date changes), <code>RecordSupplierAck</code> (T0 when the adapter confirms)</td><td><span class="tag llm">LLM</span> <span class="tag wf">Workflow</span></td></tr>
+<tr><td>↳ <strong>Channel adapters</strong></td><td>One interface, many transports: REST/API, EDI (850/855/856/810), supplier portal, email, SFTP/CSV. See the <a href="suppliers.html">supplier ladder</a></td><td>Per-channel credentials (injected, never visible to the LLM)</td><td>Transport only</td><td><span class="tag det">Det</span> / browser automation</td></tr>
+<tr><td>↳ <strong>Document Extractor</strong></td><td>Reads order confirmations, invoices, price lists and packing lists (PDF/XLSX/email) into typed JSON with per-field confidence</td><td>Document Intelligence OCR + layout, LLM structured output</td><td>Returns extraction; fields below 0.9 confidence are re-checked by a verifier</td><td><span class="tag ml">OCR</span> <span class="tag llm">LLM</span></td></tr>
+<tr><td><strong>Supplier Scorecard</strong></td><td>Tracks on-time-in-full (OTIF), lead-time distribution, fill rate, price drift, quality returns and response latency</td><td>PO / ASN / receipt / returns history</td><td>Updates scorecard (T0); raises <code>supplier.risk</code></td><td><span class="tag ml">Stats</span></td></tr>
+</table></div>
+
+<h2 id="logistics">Logistics Coordination</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools</th><th>Actions (tier)</th><th>Technique</th></tr>
+<tr><td><strong>Inbound Coordinator</strong></td><td>Converts ASNs into 3PL inbound notices, books dock slots, reconciles receipts against ASN</td><td>ASNs, 3PL API, PO lines</td><td><code>CreateInboundNotice</code> (T0), <code>FlagReceiptDiscrepancy</code> (T0)</td><td><span class="tag wf">Workflow</span> <span class="tag rules">Rules</span></td></tr>
+<tr><td><strong>Node Allocation</strong></td><td>Decides which 3PL node ships each order, and when to transfer stock between nodes</td><td>ATP per node, carrier rates, SLA</td><td><code>AllocateOrder</code> (T0), <code>CreateTransfer</code> (T1)</td><td><span class="tag det">Optimiser</span></td></tr>
+<tr><td><strong>Delivery Exception Agent</strong></td><td>Handles lost, damaged and delayed parcels with the carrier, and triggers proactive customer messages</td><td>Carrier tracking webhooks, orders</td><td><code>OpenCarrierClaim</code> (T1), <code>ReshipOrder</code> (T1 ≤ €250)</td><td><span class="tag llm">LLM</span> <span class="tag rules">Rules</span></td></tr>
+</table></div>
+
+<h2 id="pricing">Merchandising & Pricing</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools</th><th>Actions (tier)</th><th>Technique</th></tr>
+<tr><td><strong>Pricing Agent</strong></td><td>Recommends price moves to hit margin and sell-through goals. Uses scarcity pricing when cover is low and markdowns on ageing stock</td><td>Elasticity model, stock cover, competitor prices, cost, supplier MAP policy</td><td><code>ChangePrice</code> (T0 within ±5% · T1 within ±15% · T2 beyond, never below floor)</td><td><span class="tag ml">ML</span> <span class="tag rules">Rules</span></td></tr>
+<tr><td>↳ <strong>Price Guard</strong></td><td>Hard verifier: margin floor, MAP compliance, maximum changes per SKU per week, price-parity across channels, reference-price legality (e.g. EU Omnibus 30-day rule)</td><td>Price book, cost, legal rules</td><td>Veto with reason</td><td><span class="tag rules">Rules</span></td></tr>
+<tr><td><strong>Promotion Planner</strong></td><td>Builds promotion calendar (seasonal sales, bundles) with expected uplift and stock impact</td><td>Forecast, elasticity, stock, marketing plan</td><td><code>SchedulePromo</code> (T2)</td><td><span class="tag ml">ML</span> <span class="tag llm">LLM</span></td></tr>
+<tr><td><strong>Competitor Monitor</strong></td><td>Collects competitor and retailer prices for matching products; the LLM does product matching</td><td>Scraper / price feed</td><td>Emits <code>market.price_observed</code></td><td><span class="tag det">Scraper</span> <span class="tag llm">LLM match</span></td></tr>
+</table></div>
+
+<h2 id="marketing">Marketing & Growth</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools</th><th>Actions (tier)</th><th>Technique</th></tr>
+<tr><td><strong>Growth Strategist</strong></td><td>Plans weekly campaigns by stock-aware objective: push high-cover items, protect scarce ones</td><td>Stock cover, margins, attribution, calendar</td><td><code>PlanCampaign</code> (T1), publishes <code>campaign.planned</code> to Demand Planning <em>before</em> launch</td><td><span class="tag llm">LLM</span></td></tr>
+<tr><td><strong>Budget Allocator</strong></td><td>Shifts spend between channels and ad sets by marginal ROAS, within daily caps</td><td>Google / Meta ads APIs, attribution (MMM + platform)</td><td><code>SetAdBudget</code> (T0 ±20%/day within cap · T2 above)</td><td><span class="tag ml">Contextual bandit</span></td></tr>
+<tr><td><strong>Creative Agent</strong><br/><span class="muted">sub: Brand Guardian</span></td><td>Produces ad copy, emails and landing copy; the Brand Guardian judges tone, claims and legal wording</td><td>Brand book (RAG), product facts (tool), image library</td><td><code>PublishCreative</code> (T1 after Brand Guardian pass)</td><td><span class="tag llm">LLM</span> <span class="tag llm">LLM-judge</span></td></tr>
+<tr><td><strong>Lifecycle / CRM Agent</strong></td><td>Runs segments and flows in Klaviyo: back-in-stock, replenishment reminders, win-back</td><td>Customer segments, consent flags</td><td><code>TriggerFlow</code> (T0, consent-checked)</td><td><span class="tag rules">Rules</span> <span class="tag llm">LLM</span></td></tr>
+</table></div>
+
+<h2 id="care">Customer Care & Refunds</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools</th><th>Actions (tier)</th><th>Technique</th></tr>
+<tr><td><strong>Triage</strong></td><td>Classifies intent, urgency, language and sentiment; detects prompt-injection attempts</td><td>Inbound ticket</td><td>Routing only</td><td><span class="tag llm">Small LLM</span></td></tr>
+<tr><td><strong>Resolution Agent</strong></td><td>Answers questions (WISMO, care, sizing), changes addresses, starts returns, proposes goodwill</td><td>Order, shipment, product facts, policy (RAG). Customer-scoped tools only, bound to the ticket's customer</td><td><code>SendReply</code> (T1), <code>UpdateAddress</code> before dispatch (T0), <code>AuthoriseReturn</code> (T0)</td><td><span class="tag llm">LLM</span></td></tr>
+<tr><td>↳ <strong>Refund Policy Engine</strong></td><td>Decides refunds deterministically from policy plus customer risk score; the LLM cannot override it</td><td>Order value, return status, customer history, abuse model</td><td><code>IssueRefund</code> (T0 ≤ €150 and policy-clean · T1 ≤ €500 · T2 above)</td><td><span class="tag rules">Rules</span> <span class="tag ml">ML abuse</span></td></tr>
+<tr><td>↳ <strong>Reply QA</strong></td><td>Checks every outbound reply: facts match tool data, no unauthorised promises, tone</td><td>Draft reply and cited records</td><td>Block / pass</td><td><span class="tag llm">LLM-judge</span> <span class="tag rules">Rules</span></td></tr>
+<tr><td><strong>Voice of Customer</strong></td><td>Clusters complaints (e.g. "towel sheds") into quality signals for suppliers and catalogue</td><td>Tickets, reviews, returns reasons</td><td>Emits <code>quality.signal</code></td><td><span class="tag llm">LLM</span> <span class="tag ml">Clustering</span></td></tr>
+</table></div>
+
+<h2 id="finance">Finance & Reconciliation</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools</th><th>Actions (tier)</th><th>Technique</th></tr>
+<tr><td><strong>Reconciliation Agent</strong></td><td>Matches Shopify orders ↔ Stripe charges ↔ payouts ↔ bank; 3PL bills ↔ activity; explains breaks</td><td>Stripe balance transactions, bank feed, Shopify, 3PL invoices, accounting API</td><td><code>PostJournal</code> (T0 for matched · T2 for adjustments), <code>OpenRecon</code> <code>Break</code> (T0)</td><td><span class="tag det">Det matching</span> <span class="tag llm">LLM break explainer</span></td></tr>
+<tr><td><strong>Accounts Payable Agent</strong></td><td>Three-way match (PO ↔ receipt ↔ invoice), schedules payments to terms</td><td>Extracted invoices, POs, receipts</td><td><code>ApproveInvoice</code> (T0 exact match · T2 variance > 2%), <code>SchedulePayment</code> (T1; T3 for new bank details)</td><td><span class="tag det">Det</span> <span class="tag rules">Rules</span></td></tr>
+<tr><td><strong>Cash & Budget Agent</strong></td><td>Keeps a 13-week cash forecast and open-to-buy, and publishes budget envelopes to Procurement and Marketing</td><td>Ledger, POs, forecasts, payout schedule</td><td><code>PublishBudget</code> (T1 within owner-set caps)</td><td><span class="tag det">Det</span> <span class="tag ml">ML</span></td></tr>
+<tr><td><strong>Close & Reporting</strong></td><td>Month-end close checklist, VAT prep, management pack narrative</td><td>Ledger (read-only)</td><td>Drafts only; filing is T3</td><td><span class="tag llm">LLM</span> <span class="tag wf">Workflow</span></td></tr>
+</table></div>
+
+<h2 id="control">Control Tower (Risk & Exceptions)</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent</th><th>What it does</th><th>Data & tools</th><th>Actions (tier)</th><th>Technique</th></tr>
+<tr><td><strong>Sentinel</strong></td><td>Real-time anomaly detection on business metrics and agent behaviour (action rate, spend velocity, refusal and validation-error rates, cost per task)</td><td>Read-only tap on bus, metrics, traces</td><td><code>QuarantineAgent</code> (T0, automatic), <code>HaltDomain</code> (T1)</td><td><span class="tag ml">ML</span> <span class="tag rules">Rules</span></td></tr>
+<tr><td><strong>Incident Commander</strong></td><td>Opens an incident, collects evidence, runs runbooks (roll back price, pause campaigns), writes the human brief</td><td>Audit log, traces, runbooks</td><td>Runbook actions (pre-approved, T1), <code>PageOwner</code> (T0)</td><td><span class="tag llm">LLM</span> <span class="tag wf">Workflow</span></td></tr>
+<tr><td><strong>Auditor</strong></td><td>Samples 2-5% of T0/T1 actions each day and re-judges them independently; feeds evaluation datasets</td><td>Action log, frozen context snapshots</td><td>Findings only</td><td><span class="tag llm">LLM-judge</span></td></tr>
+</table></div>
+
+<h2 id="contract">Every agent ships with a contract</h2>
+<p>An agent is a registered, versioned artefact, not a prompt in a string. The registry drives the tool allow-list, identity, limits and evaluation gates.</p>
+<pre><code>agent: procurement-agent
+version: 3.4.1                    # prompt + tools + model pinned together
+owner_domain: procurement
+identity: mi-agent-procurement   # its own workload identity (never shared)
+model_policy:
+  default: frontier-reasoning      # routed via AI gateway
+  fallback: frontier-alt
+  max_tool_rounds: 8
+  timeout_s: 180
+  token_budget_per_task: 60000
+tools:                            # allow-list; everything else is invisible
+  - get_reorder_recommendations
+  - get_supplier_terms
+  - get_budget_position
+  - build_po_draft                # deterministic PO Builder
+  - propose_action                # only way to cause a side effect
+actions:
+  CreatePurchaseOrder: { tiers: { T0: "<=5000", T1: "<=20000", T2: "<=60000", T3: ">60000" } }
+  AmendPO:            { tiers: { T1: "qty_delta<=20%", T2: "otherwise" } }
+evaluation:
+  offline_suite: procurement-golden-v12   # must pass >= 97% before promote
+  shadow_days: 7
+kill_switch: procurement.*</code></pre>
+
+</div></main>
+</body>
+</html>

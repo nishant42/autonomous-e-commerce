@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Domain Architecture</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">01 · Company / domain architecture</div>
+<h1>Departments as bounded contexts</h1>
+<p class="lede">The company is modelled the way a well-run retailer is organised. There are nine operating departments, each a <strong>bounded context</strong> with its own data, its own events and its own agents. There is also a thin governance layer where the owners set the envelope.</p>
+
+<div class="tldr"><span class="t">Key idea</span>
+<ul>
+  <li>Departments exist to create <strong>ownership boundaries</strong>, not to copy a human org chart. Each department is the <em>single writer</em> of its data and publishes events for everyone else.</li>
+  <li>One cross-cutting <strong>Control Tower</strong> (Risk & Exceptions) watches every other department. It can pause any of them, but it never runs their business logic.</li>
+</ul></div>
+
+<h2>Company map</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart TB
+  OWN["Owners (human)<br/>policy · envelopes · T3 exceptions"] --> CT["Control Tower<br/>anomaly detection · quarantine<br/>kill switches · audit"]
+
+  subgraph REV["Revenue side"]
+    direction TB
+    MKT["Marketing & Growth"]
+    PRC["Merchandising & Pricing"]
+    COM["Commerce & Orders"]
+    CS["Customer Care & Refunds"]
+    MKT -- "traffic" --> COM
+    PRC -- "prices" --> COM
+    COM -- "orders" --> CS
+  end
+
+  subgraph SUP["Supply side"]
+    direction TB
+    DP["Demand Planning & Inventory"]
+    PROC["Procurement"]
+    SM["Supplier Management"]
+    LOG["Logistics Coordination"]
+    DP -- "reorder recs" --> PROC
+    PROC -- "POs" --> SM
+    SM -- "ASNs" --> LOG
+  end
+
+  FIN["Finance &<br/>Reconciliation"]
+
+  COM -- "sell-through" --> DP
+  MKT -- "campaign plans" --> DP
+  LOG -- "receipts" --> DP
+  DP -- "stock cover" --> PRC
+  DP -- "stock cover" --> MKT
+  REV -- "payments · refunds" --> FIN
+  SUP -- "commitments · invoices" --> FIN
+  FIN -- "budgets" --> PROC
+  FIN -- "budgets" --> MKT
+  CT -. "monitors / pauses" .-> REV
+  CT -. "monitors / pauses" .-> SUP
+  CT -. "monitors / pauses" .-> FIN
+</script>
+</div>
+<p class="caption">Figure 1.1: Departments and their main information flows. Solid lines are business events; dotted lines are supervisory control.</p>
+
+<h2>Department responsibilities and data ownership</h2>
+<p>"Owns" means this department is the only writer. Everyone else reads through its API or its events.</p>
+<div class="table-wrap"><table>
+<tr><th>Department</th><th>Mission</th><th>Owns (system of record)</th><th>Publishes</th><th>Consumes</th></tr>
+<tr><td><strong>Commerce & Orders</strong></td><td>Take orders, keep the catalogue correct and sellable, route orders to 3PL</td><td>Shopify (catalogue, orders, customers), order routing state</td><td><code>order.placed</code>, <code>order.cancelled</code>, <code>catalog.updated</code></td><td>price changes, stock projections, fraud verdicts</td></tr>
+<tr><td><strong>Demand Planning & Inventory</strong></td><td>Know what we have, what we will sell, and when we run out</td><td>Forecasts, stock positions (available-to-promise), safety-stock parameters</td><td><code>forecast.updated</code>, <code>stock.low</code>, <code>reorder.recommended</code>, <code>demand.anomaly</code></td><td>orders, receipts, campaign plans, supplier lead times</td></tr>
+<tr><td><strong>Procurement</strong></td><td>Turn recommendations into the right POs at the right cost</td><td>Purchase orders, PO lines, commitments</td><td><code>po.created</code>, <code>po.confirmed</code>, <code>po.changed</code></td><td>reorder recommendations, budgets, supplier terms</td></tr>
+<tr><td><strong>Supplier Management</strong></td><td>Talk to suppliers through whatever channel they support, and score them</td><td>Supplier master, contracts, supplier scorecards, conversation threads</td><td><code>supplier.ack</code>, <code>asn.received</code>, <code>supplier.delay</code>, <code>supplier.price_change</code></td><td>POs, quality issues, payment status</td></tr>
+<tr><td><strong>Logistics Coordination</strong></td><td>Coordinate the 3PL and carriers. Physical ops are outsourced</td><td>Inbound appointments, shipment tracking projections</td><td><code>goods.received</code>, <code>shipment.dispatched</code>, <code>delivery.exception</code></td><td>ASNs, orders, returns</td></tr>
+<tr><td><strong>Merchandising & Pricing</strong></td><td>Set prices and promotions inside margin and brand rules</td><td>Price book, promotion calendar, markdown plans</td><td><code>price.changed</code>, <code>promo.scheduled</code></td><td>stock cover, elasticity model, competitor prices, supplier MAP policy</td></tr>
+<tr><td><strong>Marketing & Growth</strong></td><td>Create demand efficiently and match it to supply</td><td>Campaign plans, audiences, creative library, marketing budget spend</td><td><code>campaign.planned</code>, <code>campaign.changed</code></td><td>stock cover, margins, price changes, attribution data</td></tr>
+<tr><td><strong>Customer Care & Refunds</strong></td><td>Resolve customer issues quickly and fairly</td><td>Ticket state (Gorgias), refund / return decisions</td><td><code>refund.issued</code>, <code>return.authorised</code>, <code>quality.signal</code></td><td>orders, shipments, policies</td></tr>
+<tr><td><strong>Finance & Reconciliation</strong></td><td>Keep books correct, cash healthy and budgets enforced</td><td>General ledger (accounting system), budgets, cash forecast, reconciliation state</td><td><code>budget.updated</code>, <code>payment.executed</code>, <code>recon.break</code></td><td>payments, payouts, POs, invoices, refunds, 3PL bills</td></tr>
+<tr><td><strong>Control Tower (Risk)</strong></td><td>Detect, contain and explain harmful or abnormal behaviour</td><td>Risk signals, quarantine registry, kill-switch state, audit index</td><td><code>agent.quarantined</code>, <code>domain.halted</code>, <code>incident.opened</code></td><td>everything (read-only tap on the bus)</td></tr>
+</table></div>
+
+<h2>The governance boundary: what humans still do</h2>
+<div class="grid g2">
+  <div class="card">
+    <h4>Humans do (outside daily operations)</h4>
+    <ul>
+      <li>Approve the <strong>envelope</strong>: monthly spend caps, margin floors, maximum discount, refund policy, brand voice.</li>
+      <li>Sign supplier contracts and grant legal authority (e.g. a PO signing mandate up to €X).</li>
+      <li>Handle <strong>T3 exceptions</strong>: novel situations, legal threats, safety incidents.</li>
+      <li>Review a weekly autonomous operations report and the evaluation dashboards.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4>Humans do not do</h4>
+    <ul>
+      <li>Approve routine POs, price changes, refunds or campaigns inside the envelope.</li>
+      <li>Answer customer emails or supplier emails.</li>
+      <li>Reconcile payouts, chase invoices or book journals.</li>
+      <li>Watch dashboards to keep things running. The Control Tower does this.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout"><span class="t">Why model it this way?</span>
+<p>With bounded contexts, the blast radius stays small. A misbehaving pricing agent can be quarantined without affecting procurement or customer care. They also give each agent a small, testable mandate. A narrow agent with 6 tools is far more reliable than a "CEO agent" with 60.</p></div>
+
+</div></main>
+</body>
+</html>

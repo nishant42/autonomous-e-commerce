@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Procurement & Marketing Flows</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">06 · Procurement and marketing flows</div>
+<h1>The two loops that run the business</h1>
+<p class="lede">The supply loop turns demand into stock and cash movements. The demand loop keeps marketing spend matched to what can actually be sold. They meet at <strong>stock cover</strong>: the number of days of demand the available stock can serve.</p>
+
+<div class="toc"><a href="#proc">Flow 1: Demand → Finance</a><a href="#proc-steps">Step table</a><a href="#po-state">PO lifecycle</a><a href="#mkt">Flow 2: Marketing loop</a><a href="#mkt-rules">Coupling rules</a></div>
+
+<h2 id="proc">Flow 1 · Demand → forecast → reorder → supplier → inventory → finance</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant SH as Shopify
+  participant DP as Demand Planning
+  participant RP as Replenishment Planner
+  participant PR as Procurement Agent
+  participant FN as Finance (Budget)
+  participant AG as Action Gateway
+  participant SL as Supplier Liaison
+  participant YD as Supplier (Yves Delorme)
+  participant LG as Logistics / 3PL
+  participant AP as Accounts Payable
+  SH->>DP: order.placed (stream)
+  DP->>DP: re-forecast (nightly + event-triggered)
+  DP->>RP: forecast.updated (P10/P50/P90)
+  RP->>RP: ROP / order-up-to (lead-time dist, service level, MOQ, case pack)
+  RP->>PR: reorder.recommended {sku, qty_range, need_by}
+  PR->>FN: get_budget_position()
+  FN-->>PR: open-to-buy, cash runway
+  PR->>PR: consolidate by supplier, build PO (deterministic PO Builder)
+  PR->>AG: CreatePurchaseOrder (tier by value)
+  AG-->>PR: executed (idempotent) → po.created
+  AG->>SL: send via supplier's best channel
+  SL->>YD: EDI 850 / portal / email + PDF
+  YD-->>SL: acknowledgement (855 / email / portal status)
+  SL->>AG: RecordSupplierAck or AmendPO (deltas)
+  YD-->>SL: ASN / packing list (856 / email)
+  SL->>LG: asn.received → inbound notice to 3PL
+  LG-->>DP: goods.received (counted qty) → ATP up → Shopify stock
+  YD-->>AP: invoice (810 / PDF email)
+  AP->>AP: 3-way match PO ↔ receipt ↔ invoice
+  AP->>AG: ApproveInvoice + SchedulePayment (to terms)
+  AG-->>FN: payment.executed → ledger, cash forecast, supplier scorecard
+</script>
+</div>
+<p class="caption">Figure 6.1: The procurement loop end to end. Every arrow into the Action Gateway is a tiered, idempotent, audited action.</p>
+
+<h3 id="proc-steps">Step by step: who decides, with what, under which guard</h3>
+<div class="table-wrap"><table>
+<tr><th>#</th><th>Step</th><th>Owner</th><th>Technique</th><th>Guardrail</th></tr>
+<tr><td>1</td><td>Forecast demand per SKU × node</td><td>Forecasting Agent</td><td><span class="tag ml">ML</span></td><td>Publish is blocked if backtest error regresses by more than 15% vs the previous model. Otherwise the last good forecast stays live.</td></tr>
+<tr><td>2</td><td>Compute reorder need</td><td>Replenishment Planner</td><td><span class="tag rules">Rules</span> <span class="tag ml">Opt</span></td><td>Cover cap of 16 weeks (overbuy guard). Service-level target per ABC class.</td></tr>
+<tr><td>3</td><td>Budget check</td><td>Budget Checker</td><td><span class="tag rules">Rules</span></td><td>Open-to-buy per supplier/month. Cash-runway floor of 12 weeks.</td></tr>
+<tr><td>4</td><td>Consolidate and build PO</td><td>Procurement Agent + PO Builder</td><td><span class="tag llm">LLM</span> over <span class="tag det">Det</span></td><td>The LLM chooses options; quantities and prices come only from the Builder tool.</td></tr>
+<tr><td>5</td><td>Approve</td><td>Action Gateway</td><td><span class="tag rules">Policy</span></td><td>T0 ≤ €5k · T1 ≤ €20k · T2 ≤ €60k (Buy Panel) · T3 above. Daily supplier cap. Idempotency key.</td></tr>
+<tr><td>6</td><td>Transmit to supplier</td><td>Supplier Liaison + adapter</td><td><span class="tag det">Det</span> / <span class="tag llm">LLM</span></td><td>Channel fallback ladder. Outbound emails are template-rendered with PO data, not free-form.</td></tr>
+<tr><td>7</td><td>Acknowledge and reconcile</td><td>Supplier Liaison + Verifier</td><td><span class="tag llm">Maker-checker</span></td><td>Any delta to price, quantity or date becomes an <code>AmendPO</code> proposal with its own tier.</td></tr>
+<tr><td>8</td><td>Receive</td><td>Inbound Coordinator</td><td><span class="tag wf">Workflow</span></td><td>Short or over receipt beyond 2% raises a discrepancy with the supplier and holds payment.</td></tr>
+<tr><td>9</td><td>Pay</td><td>AP Agent</td><td><span class="tag det">Det</span></td><td>Three-way match. <strong>Any change to supplier bank details is T3, always</strong> (payment-fraud control).</td></tr>
+<tr><td>10</td><td>Learn</td><td>Scorecard + Forecasting</td><td><span class="tag ml">Stats</span></td><td>Actual lead time and fill rate update the distributions used in step 2.</td></tr>
+</table></div>
+
+<h3 id="po-state">Purchase-order lifecycle</h3>
+<div class="diagram">
+<script type="text/x-mermaid">
+stateDiagram-v2
+  [*] --> Proposed
+  Proposed --> Rejected: policy / verifier fail
+  Proposed --> PendingApproval: tier T2/T3
+  PendingApproval --> Approved: panel pass / owner signal
+  PendingApproval --> Rejected: split verdict / timeout safe-default
+  Proposed --> Approved: tier T0/T1
+  Approved --> Sent: adapter confirms transmit
+  Sent --> Acknowledged: supplier ack matches
+  Sent --> Chasing: no ack in 48h
+  Chasing --> Acknowledged
+  Chasing --> Escalated: no ack in 5 days
+  Acknowledged --> Amended: supplier deltas accepted
+  Amended --> Acknowledged
+  Acknowledged --> InTransit: ASN received
+  InTransit --> Received: 3PL receipt
+  Received --> Invoiced
+  Invoiced --> Paid: 3-way match OK
+  Received --> Closed: fully received and paid
+  Paid --> Closed
+  Rejected --> [*]
+  Closed --> [*]
+</script>
+</div>
+
+<h2 id="mkt">Flow 2 · Marketing → demand → inventory → pricing / procurement → marketing adjustment</h2>
+<p>A closed control loop. Marketing publishes <strong>intent before spending</strong>, so supply can respond before demand arrives. Stock cover then feeds back into marketing and pricing continuously.</p>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  MK["Growth Strategist<br/>plans campaign"] -- "campaign.planned<br/>(SKUs, uplift, dates)" --> DP["Demand Planning<br/>adds uplift to forecast"]
+  DP -- "cover check" --> CV{"Projected cover<br/>during campaign?"}
+  CV -- "≥ 4 weeks: OK" --> GO["Launch as planned"]
+  CV -- "2-4 weeks" --> PR["Procurement:<br/>pull forward / expedite PO"]
+  CV -- "< 2 weeks and no<br/>feasible supply" --> SW["Swap hero SKU /<br/>shift budget to<br/>high-cover SKUs"]
+  PR --> GO
+  SW --> GO
+  GO -- "spend (Budget Allocator)" --> DEM(["Real demand"])
+  DEM -- "order.placed stream" --> DS["Demand Sensing<br/>velocity vs plan"]
+  DS -- "cover dropping fast" --> PX["Pricing Agent:<br/>stop discounts →<br/>scarcity price (within band)"]
+  DS -- "cover dropping fast" --> ADJ["Budget Allocator:<br/>throttle SKU ads,<br/>switch to waitlist / back-in-stock"]
+  DS -- "velocity below plan" --> BOOST["Pricing: promo within floor<br/>Marketing: raise spend"]
+  PX --> MK
+  ADJ --> MK
+  BOOST --> MK
+</script>
+</div>
+<p class="caption">Figure 6.2: The marketing and supply control loop. Cover thresholds and hysteresis stop the loop from oscillating.</p>
+
+<h3 id="mkt-rules">Coupling rules (deterministic, owned by Control Tower policy)</h3>
+<div class="table-wrap"><table>
+<tr><th>Signal</th><th>Marketing response</th><th>Pricing response</th><th>Procurement response</th></tr>
+<tr><td>Cover &gt; 12 weeks (overstock)</td><td>Prioritise SKU in ads and email</td><td>Allow promo down to margin floor</td><td>Freeze reorders</td></tr>
+<tr><td>Cover 4-12 weeks (healthy)</td><td>Normal allocation by ROAS</td><td>Normal</td><td>Normal reorder policy</td></tr>
+<tr><td>Cover 2-4 weeks (tight)</td><td>No new acquisition spend on SKU; retargeting only</td><td>End discounts on SKU</td><td>Pull forward / expedite if lead time allows</td></tr>
+<tr><td>Cover &lt; 2 weeks (critical)</td><td>Pause SKU ads; promote alternatives; enable back-in-stock capture</td><td>Scarcity price up to +10% (within MAP and parity rules)</td><td>Emergency PO / split shipment / alternative supplier SKU</td></tr>
+<tr><td>Out of stock</td><td>All paid spend on SKU off; waitlist flow on</td><td>n/a</td><td>Track inbound; drive back-in-stock email on receipt</td></tr>
+</table></div>
+<div class="callout info"><span class="t">Avoiding a hidden feedback loop</span>
+<p>Marketing and pricing change the very demand that forecasting learns from. Google's "Hidden Technical Debt in ML Systems" paper calls this a hidden feedback loop: the model ends up learning from its own effects. Three rules stop it: every campaign and price change is <strong>published as a plan before it runs</strong> and becomes a forecast feature; about <strong>5% of eligible SKU-days are held out</strong> from promotions to measure true lift; and every consumer of the forecast is registered, so a model change never surprises an undeclared user.</p></div>
+
+<div class="callout"><span class="t">Why deterministic coupling rules?</span>
+<p>The loop must be <strong>stable</strong>. If two LLM agents "negotiated" every hour, you would get oscillation and cost you cannot explain. The thresholds are policy, the responses inside each band are agent judgement, and hysteresis (e.g. leave "tight" only when cover goes above 5 weeks) prevents flapping.</p></div>
+
+</div></main>
+</body>
+</html>

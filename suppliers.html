@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supplier Integration Ladder</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deep dive D · Supplier interaction</div>
+<h1>No perfect API: the supplier integration ladder</h1>
+<p class="lede">Suppliers talk however they talk. The platform absorbs that variety with one <strong>canonical supplier model</strong> and a ladder of channel adapters, from structured and reliable at the top to flexible and fragile at the bottom. Agents reason about POs, acknowledgements and ASNs, never about transports.</p>
+
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  subgraph LADDER["Channel ladder"]
+    direction TB
+    R1["1 · REST / GraphQL API<br/>sync, typed"]
+    R2["2 · EDI (850/855/856/810)<br/>via EDI provider"]
+    R3["3 · Files: SFTP / CSV / XLSX<br/>scheduled drops"]
+    R4["4 · Email + attachments<br/>Graph mailbox"]
+    R5["5 · Supplier B2B portal<br/>browser automation"]
+  end
+  R1 & R2 --> N["Deterministic<br/>mapping"]
+  R3 --> P["Parser + schema<br/>validation"]
+  R4 --> X["Doc Extractor (OCR + LLM)<br/>→ Verifier"]
+  R5 --> RPA["Playwright script<br/>(LLM self-heal only)"] --> X
+  N & P & X --> C[["Canonical supplier events<br/>supplier.ack · asn.received<br/>invoice.received · supplier.delay<br/>supplier.price_change · stock.feed"]]
+  C --> BUS["Service Bus"]
+</script>
+</div>
+<p class="caption">Figure D.1: Every channel converges on the same canonical events. Lower rungs add extraction and verification steps.</p>
+
+<h2>Channel comparison</h2>
+<div class="table-wrap"><table>
+<tr><th>Channel</th><th>Outbound (we send)</th><th>Inbound (we receive)</th><th>Reliability</th><th>Specific controls</th></tr>
+<tr><td><strong>API</strong></td><td>POST PO, amend, cancel</td><td>Webhooks or polling: status, ASN, stock</td><td>High</td><td>Idempotency keys, schema contract tests, rate-limit aware client</td></tr>
+<tr><td><strong>EDI</strong></td><td>850 PO, 860 change</td><td>997 functional ack, 855 PO ack, 856 ASN, 810 invoice</td><td>High</td><td>997 within SLA or chase; control numbers deduplicated; mapping unit tests per partner</td></tr>
+<tr><td><strong>Files</strong></td><td>PO CSV to SFTP</td><td>Price lists, stock feeds, ASNs as CSV/XLSX</td><td>Medium</td><td>Strict column schema; row-count and checksum checks; diff vs previous file; quarantine of suspicious diffs (e.g. 40% of prices changed)</td></tr>
+<tr><td><strong>Email</strong></td><td>Templated PO email + PDF; clarification requests</td><td>Confirmations, delays, price changes, invoices (PDF), free text</td><td>Medium-low</td><td>SPF, DKIM and DMARC; sender allow-list; thread binding by PO reference; untrusted-content handling; maker-checker extraction; outbound only to verified supplier domain</td></tr>
+<tr><td><strong>Supplier agent (A2A)</strong></td><td>Task request to the supplier's agent</td><td>Structured replies and status updates</td><td>Emerging</td><td>Google's open Agent2Agent protocol with signed Agent Cards for identity. Treated like any other untrusted channel: replies are verified and every resulting action still passes the gateway</td></tr>
+<tr><td><strong>Portal (RPA)</strong></td><td>Enter PO in B2B portal</td><td>Order status, stock availability, invoice download</td><td>Low</td><td>Deterministic script first; LLM only to re-locate changed elements; screenshot evidence per step; read-only by default; write steps need a post-condition check; isolated worker; vaulted credentials</td></tr>
+</table></div>
+
+<h2>Supplier capability profile</h2>
+<p>Each supplier has a declarative profile. The Supplier Liaison chooses channels from it, and the fallback order is explicit.</p>
+<pre><code>supplier: sup_yd            # Yves Delorme (hypothetical relationship)
+contacts:
+  account_manager: { email_domain: "verified-supplier-domain.example", verified_phone_ref: "kv://..." }
+channels:
+  purchase_order:   [edi_850, portal, email_pdf]      # try in order
+  po_ack:           [edi_855, email]
+  asn:              [edi_856, email_packing_list]
+  invoice:          [edi_810, email_pdf]
+  price_list:       [email_xlsx]                        # quarterly
+  stock_availability: [portal_readonly]                 # checked before expedite requests
+  expedite_request: [email]                             # human-to-human style, templated + LLM paragraph
+sla:
+  po_ack_hours: 48
+  chase_ladder: [ "email reminder @48h", "second reminder @72h", "account manager @96h", "T3 owner brief @120h" ]
+terms:
+  moq_eur: 1500
+  payment: "30 days EOM"
+  map_policy: true
+  expedite_fee_max_pct: 8</code></pre>
+
+<h2>Handling an inbound supplier email</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart TB
+  M["Email arrives in procurement mailbox"] --> A{"SPF / DKIM / DMARC pass<br/>and sender on allow-list?"}
+  A -- no --> Q["Quarantine + security event<br/>(never reaches an agent with tools)"]
+  A -- yes --> B["Prompt Shield scan<br/>(treat body + attachments as data)"]
+  B --> C["Intent router (small LLM):<br/>ack · delay · price change · invoice · question · other"]
+  C --> D["Doc Extractor → typed JSON + confidence"]
+  D --> E["Verifier: PO exists · SKUs on PO ·<br/>numbers appear in source · arithmetic"]
+  E -- pass --> F["Canonical event → Procurement / Finance"]
+  E -- "deltas" --> G["AmendPO / price-change proposal (tiered)"]
+  E -- fail --> H["Templated clarification reply<br/>asking for a clean document"]
+  C -- "bank details / payment change" --> T3["Always T3 + out-of-band call-back"]
+</script>
+</div>
+
+<div class="callout"><span class="t">Supplier onboarding is part of the design</span>
+<p>Onboarding a new supplier means filling in a capability profile, building or configuring the channel adapters, running a <strong>parallel month</strong> (the Liaison drafts everything, and a verifier compares against what the supplier actually sends), and only then enabling T0/T1 actions for that supplier. It also includes a commercial push: moving the supplier up the ladder. That is often negotiable once order volume is meaningful.</p></div>
+
+</div></main>
+</body>
+</html>

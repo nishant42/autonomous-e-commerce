@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forecasting & ML Models</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deep dive I · Forecasting and ML models</div>
+<h1>How demand is forecast, and every other model the company runs</h1>
+<p class="lede">Forecasting is the engine of the supply side: every reorder, price move and campaign starts from it. This page covers the problem framing, the model portfolio, the features, how forecasts become purchase decisions, the short-term demand-sensing path, the other ML models (classification, regression, bandits), and the MLOps that keeps them honest.</p>
+
+<div class="callout"><span class="t">Try it</span><p>Open the <a href="forecast-lab.html"><b>Forecast Lab</b></a> to run this whole pipeline in your browser: segmentation, backtest, reconciliation, calibration, the Monte Carlo purchase decision, CUSUM spike detection and the newsvendor calculator.</p></div>
+
+<div class="tldr"><span class="t">The design in five points</span>
+<ul>
+  <li><strong>Probabilistic, not point forecasts.</strong> Every SKU × node gets P10 / P50 / P90 daily demand for 26 weeks. Purchasing decisions need the <em>spread</em>, not just the average.</li>
+  <li><strong>A portfolio, chosen per segment.</strong> A global LightGBM quantile model covers regular sellers, Croston/TSB covers the intermittent long tail, similarity-based curves cover new products, and seasonal-naive/ETS baselines always run as a safety net.</li>
+  <li><strong>Hierarchically coherent.</strong> Forecasts are reconciled (MinT) so variants add up to products, collections, categories and the total. Finance and procurement then see the same numbers.</li>
+  <li><strong>Stock-outs are not low demand.</strong> Sales during stock-outs are treated as censored, so the model doesn't learn that "we sold nothing" means "nobody wanted it".</li>
+  <li><strong>LLMs never produce the numbers.</strong> They extract product attributes for cold start and explain anomalies. Forecasts come from ML, and decisions from optimisation plus policy.</li>
+</ul></div>
+
+<h2 id="pipeline">Forecasting architecture</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  subgraph SRC["Sources"]
+    direction TB
+    S1["Orders & returns<br/>(Shopify)"]
+    S2["Stock & stock-out hours<br/>(Ops Ledger / 3PL)"]
+    S3["Price & promo history<br/>(price book)"]
+    S4["Campaign plans<br/>(campaign.planned)"]
+    S5["Traffic & conversion<br/>(clickstream)"]
+    S6["Calendar · holidays<br/>· weather (optional)"]
+    S7["Product attributes<br/>(LLM-extracted)"]
+  end
+  subgraph FS["Feature store (Lakehouse)"]
+    F1["Daily SKU×node panel<br/>lags · rolling stats · calendar<br/>price index · promo flags · availability"]
+  end
+  subgraph TR["Nightly training · Azure ML"]
+    direction TB
+    T1["Segment SKUs<br/>(ADI / CV² · age)"]
+    T2["Fit portfolio<br/>LightGBM quantile · TSB · ETS · analog"]
+    T3["Rolling-origin backtest<br/>WAPE · bias · pinball · coverage"]
+    T4{"Beats champion<br/>and baseline?"}
+  end
+  REG[("Model registry<br/>versioned")]
+  INF["Batch inference<br/>26-week P10/P50/P90"]
+  REC["Hierarchical reconciliation<br/>MinT + conformal calibration"]
+  FST[("Forecast store<br/>Ops Ledger · fcst-vN")]
+  subgraph USE["Consumers"]
+    direction TB
+    U1["Replenishment Planner"]
+    U2["Pricing (elasticity)"]
+    U3["Marketing (cover)"]
+    U4["Finance (cash forecast)"]
+  end
+  DS["Demand Sensing<br/>intraday change-point"]
+  SRC --> FS --> T1 --> T2 --> T3 --> T4
+  T4 -- yes --> REG
+  T4 -- "no → keep last good" --> REG
+  REG --> INF --> REC --> FST --> USE
+  S1 -- "real-time stream" --> DS
+  DS -- "intraday re-forecast<br/>(spike-decay prior)" --> FST
+</script>
+</div>
+<p class="caption">Figure I.1: The nightly batch path (training → registry → inference → reconciliation) and the intraday sensing path both publish into the same forecast store, versioned.</p>
+
+<h2 id="framing">Problem framing</h2>
+<div class="table-wrap"><table>
+<tr><th>Dimension</th><th>Choice</th><th>Why</th></tr>
+<tr><td>Target</td><td>Daily <em>unconstrained</em> demand (units) per SKU × fulfilment node</td><td>Replenishment is decided per node; "unconstrained" means corrected for stock-outs.</td></tr>
+<tr><td>Horizon</td><td>1-182 days (26 weeks), refreshed nightly; intraday updates for anomalous SKUs</td><td>Covers the longest supplier lead time (P90 ≈ 33 days) plus the pre-season buying window.</td></tr>
+<tr><td>Output</td><td>Quantiles P10, P50, P90 (plus samples for simulation)</td><td>Safety stock and service level need the distribution, not a single number.</td></tr>
+<tr><td>Hierarchy</td><td>Total → category (bath, bed, throws) → collection (e.g. Étoile, Nuit) → product → variant (size × colour) → node</td><td>Sparse variants borrow strength from their parents; budgets are set at category level.</td></tr>
+<tr><td>Scale</td><td>~1,500 SKUs × 2 nodes ≈ 3,000 series</td><td>Small enough for a global model trained nightly on modest CPU in minutes.</td></tr>
+</table></div>
+
+<h3>What makes premium linen hard</h3>
+<div class="grid g2">
+  <div class="card"><h4>Intermittent long tail</h4><p>Most size × colour variants sell a few units a week, with many zero days. Classical models over-forecast these, and pure ML models are noisy.</p></div>
+  <div class="card"><h4>Censored demand</h4><p>During a stock-out, sales are zero but demand isn't. Without correction the model learns to under-forecast exactly the items that sell out.</p></div>
+  <div class="card"><h4>New collections</h4><p>Seasonal launches have no history. Their first 8 weeks are the most expensive to get wrong, because the whole pre-season buy depends on them.</p></div>
+  <div class="card"><h4>Our own actions move demand</h4><p>Promotions, price changes and campaigns cause demand. They must be features the forecast knows about, or the forecast chases its own tail.</p></div>
+</div>
+
+<h2 id="portfolio">Model portfolio</h2>
+<p>SKUs are segmented each night using the classic demand classification: <strong>ADI</strong> (average inter-demand interval) and <strong>CV²</strong> (squared coefficient of variation of non-zero demand), plus product age. Each segment gets the model family that fits it; the backtest picks the winner per segment.</p>
+
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart TB
+  A["SKU × node series"] --> B{"Age < 8 weeks<br/>or no history?"}
+  B -- yes --> C["Cold start:<br/>analog launch curves<br/>(attribute similarity kNN)"]
+  B -- no --> D{"ADI ≤ 1.32?"}
+  D -- "yes (sells most days)" --> E{"CV² ≤ 0.49?"}
+  E -- "smooth" --> F["Global LightGBM<br/>quantile regression"]
+  E -- "erratic" --> G["LightGBM + wider<br/>conformal intervals"]
+  D -- "no (many zero days)" --> H{"CV² ≤ 0.49?"}
+  H -- "intermittent" --> I["TSB / Croston-SBA<br/>+ top-down from parent"]
+  H -- "lumpy" --> J["Parent-level LightGBM<br/>→ disaggregate by share"]
+  F & G & I & J & C --> K["MinT reconciliation<br/>+ conformal calibration"]
+  L["Always: seasonal-naive + ETS baselines<br/>(fallback if ML fails its gate)"] -.-> K
+</script>
+</div>
+<p class="caption">Figure I.2: Model selection per segment (Syntetos-Boylan thresholds). Baselines always run, so there is always a safe forecast to fall back on.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Segment</th><th>Model</th><th>Type</th><th>Why this model</th></tr>
+<tr><td>Regular sellers (A/B class, smooth)</td><td><strong>Global LightGBM</strong>, one model across all series, with a quantile loss per quantile (α = 0.1, 0.5, 0.9)</td><td>Gradient-boosted trees · regression</td><td>Learns shared patterns (seasonality, promo lift, price response) across thousands of series. Handles many features. Fast, and explainable with SHAP. It dominates recent retail forecasting competitions.</td></tr>
+<tr><td>Erratic sellers</td><td>Same LightGBM with wider, conformally calibrated intervals</td><td>Regression + calibration</td><td>The point forecast is fine; the uncertainty needs to be honest.</td></tr>
+<tr><td>Intermittent long tail</td><td><strong>TSB</strong> (Teunter-Syntetos-Babai) or <strong>Croston-SBA</strong>, via statsforecast</td><td>Statistical</td><td>Designed for many-zero series. Separates "will it sell?" from "how much?". TSB also handles products fading out.</td></tr>
+<tr><td>Lumpy variants</td><td>Forecast the parent product with LightGBM, then split by recent variant share</td><td>Top-down</td><td>Size × colour noise averages out one level up.</td></tr>
+<tr><td>New products (cold start)</td><td><strong>Analog forecasting</strong>: kNN over product-attribute embeddings finds similar past launches; their launch curves are scaled by planned price and marketing weight</td><td>Similarity / nearest neighbours</td><td>No history to learn from, but a "Nuit sateen duvet in a new colour" behaves like past sateen duvet launches.</td></tr>
+<tr><td>All (safety net)</td><td>Seasonal naive, ETS</td><td>Statistical baselines</td><td>Cheap, robust, always available. If the ML model fails its gate, these are what gets published.</td></tr>
+<tr><td>All (coherence)</td><td><strong>MinT</strong> (minimum-trace) hierarchical reconciliation</td><td>Linear reconciliation</td><td>Makes every level add up, and usually improves accuracy at both the top and the bottom.</td></tr>
+<tr><td>All (calibration)</td><td><strong>Conformal prediction</strong> on backtest residuals</td><td>Calibration</td><td>Guarantees P10-P90 really contains about 80% of outcomes, which safety stock depends on.</td></tr>
+</table></div>
+
+<div class="callout info"><span class="t">Why not a deep-learning forecaster or an LLM "time-series foundation model"?</span>
+<p>At about 3,000 short, sparse series, gradient boosting plus statistical models is more accurate, cheaper, faster to retrain and easier to explain. A pretrained time-series foundation model is worth a <em>challenger</em> slot in the backtest; it gets promoted only if it wins on held-out data. Generative LLMs are never used to produce demand numbers.</p></div>
+
+<h2 id="features">Features</h2>
+<div class="table-wrap"><table>
+<tr><th>Group</th><th>Features</th><th>Notes</th></tr>
+<tr><td>Demand history</td><td>Lags 1, 7, 14, 28, 364; rolling mean/median/std over 7, 28 and 91 days; days since last sale</td><td>Computed on <em>availability-adjusted</em> demand (see below).</td></tr>
+<tr><td>Calendar</td><td>Day of week, week of year, month, UK/EU holidays, payday, Black Friday / January white sale / gifting season flags</td><td>Known in advance for the whole horizon.</td></tr>
+<tr><td>Price & promotion</td><td>Price index vs the product's reference price, discount depth, promo type, days into promo</td><td>Future values come from the <em>planned</em> price book, so the forecast responds to pricing plans.</td></tr>
+<tr><td>Marketing</td><td>Planned spend by channel, email sends, campaign flags (from <code>campaign.planned</code>)</td><td>This is why marketing must publish plans before spending.</td></tr>
+<tr><td>Traffic</td><td>Sessions, product views, add-to-bag rate (recent, lagged)</td><td>Leading indicators for short horizons only.</td></tr>
+<tr><td>Product</td><td>Category, collection, material, weight (GSM for towels), thread count (bedding), colour family, size, price tier, age</td><td>Extracted by the Catalogue Agent (LLM) from supplier lookbooks, then validated against a schema.</td></tr>
+<tr><td>Hierarchy</td><td>Parent-level forecasts and shares</td><td>Lets sparse variants borrow strength.</td></tr>
+</table></div>
+
+<h3>Censored-demand correction</h3>
+<pre><code># For each SKU × node × day
+in_stock_share  = in_stock_hours / trading_hours          # from Ledger availability events
+observed_sales  = units_sold
+if in_stock_share >= 0.9:
+    demand = observed_sales                               # clean day
+elif in_stock_share > 0:
+    demand = observed_sales / in_stock_share              # scale up partial-availability days (capped)
+else:
+    demand = NaN                                          # fully stocked-out: masked from the loss,
+                                                          # not treated as zero demand
+# Training uses a masked loss so censored days never teach the model "nobody wanted it".</code></pre>
+
+<h2 id="decisions">From forecast to purchase decision</h2>
+<p>The forecast is not the decision. The <strong>Replenishment Planner</strong> turns the forecast distribution and the supplier lead-time distribution into an order quantity, and policy then constrains it.</p>
+<div class="grid g2">
+  <div class="card">
+    <h4>Continuous replenishment (core range)</h4>
+    <p>An <strong>(R, S) periodic-review, order-up-to policy</strong>, solved by Monte Carlo simulation:</p>
+    <ul>
+      <li>Draw 5,000 samples of demand over <em>(lead time + review period)</em>, using demand samples from the forecast and lead times from the supplier scorecard distribution.</li>
+      <li>Order-up-to level <strong>S</strong> = the service-level quantile (97% for A-class, 93% B, 85% C).</li>
+      <li>Order quantity = S − (on hand + on order − backorders), rounded up to the case pack and MOQ.</li>
+      <li>Then caps: at most 16 weeks of cover, and open-to-buy and cash-runway rules.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4>Seasonal one-shot buys (new collections)</h4>
+    <p>A <strong>newsvendor</strong> decision, because unsold seasonal stock is marked down:</p>
+    <pre><code>Cu = price − cost          # margin lost per unit short
+Co = cost − salvage        # loss per unit left over
+critical_ratio = Cu / (Cu + Co)
+Q* = F⁻¹(critical_ratio)   # quantile of season demand
+
+e.g. duvet cover: price €249, cost €92,
+     end-of-season outlet value €60
+Cu = 157, Co = 32 → critical_ratio = 0.83
+→ buy the P83 of season demand, split into
+  an initial buy + an option re-order</code></pre>
+  </div>
+</div>
+
+<h2 id="sensing">Short-term demand sensing</h2>
+<p>Nightly forecasts are too slow for a spike like the 3× towel. A separate intraday path watches the live order stream.</p>
+<div class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant OS as Order stream
+  participant DS as Demand Sensing
+  participant FR as Fraud Screening
+  participant LLM as Cause classifier (LLM)
+  participant FC as Forecast store
+  participant PL as Replenishment Planner
+  OS->>DS: hourly units vs forecast P50/P90
+  DS->>DS: CUSUM on standardised residuals<br/>alarm when cumulative drift > h
+  DS->>FR: is the demand real? (distinct buyers, risk mix)
+  FR-->>DS: genuine
+  DS->>LLM: traffic sources, campaign calendar, referrers (tool data)
+  LLM-->>DS: cause = external referral (cited)
+  DS->>FC: intraday forecast = posterior with spike-decay prior<br/>tag anomaly_influenced = true
+  FC->>PL: forecast.updated → re-plan (PO tier +1)
+</script>
+</div>
+<div class="table-wrap"><table>
+<tr><th>Component</th><th>Method</th><th>Detail</th></tr>
+<tr><td>Detection</td><td><strong>CUSUM</strong> on standardised forecast residuals (Bayesian online change-point detection as a challenger)</td><td>Tuned for about 1 false alarm per SKU per quarter. Only fires on sustained drift, not one big order.</td></tr>
+<tr><td>Validation</td><td>Fraud features: distinct customers, card-country mix, address clustering</td><td>Stops a bot or fraud ring from triggering purchasing.</td></tr>
+<tr><td>Cause</td><td>Rules first (own campaign? price change?), then an LLM narrative over tool data</td><td>The narrative is for audit and humans; it doesn't change any number.</td></tr>
+<tr><td>Re-forecast</td><td>Exponential <strong>spike-decay prior</strong> fitted on past external-referral spikes, updated with observed velocity</td><td>For the towel: 3× today, decaying to about 1.6× baseline over 3 weeks.</td></tr>
+<tr><td>Governance</td><td><code>anomaly_influenced = true</code> lifts the tier of any PO it drives</td><td>A spike can never trigger a large buy without the Buy Panel.</td></tr>
+</table></div>
+
+<h2 id="other-ml">Every other ML model in the company</h2>
+<div class="table-wrap"><table>
+<tr><th>Model</th><th>Task type</th><th>Algorithm</th><th>Used by</th><th>Key metric</th></tr>
+<tr><td>Price elasticity</td><td>Regression (causal)</td><td>Hierarchical Bayesian log-log demand model (elasticity partially pooled by collection); double-ML as a challenger</td><td>Pricing Agent, Promotion Planner</td><td>Out-of-sample lift error on past promotions</td></tr>
+<tr><td>Fraud scoring</td><td><strong>Binary classification</strong></td><td>Stripe Radar score + our LightGBM classifier on order, customer-graph and velocity features</td><td>Fraud Screening</td><td>Precision at the hold threshold, chargeback rate</td></tr>
+<tr><td>Refund abuse</td><td><strong>Binary classification</strong></td><td>Logistic regression (explainable) → GBM once there is enough data</td><td>Refund Policy engine</td><td>False-positive rate on good customers</td></tr>
+<tr><td>Ticket intent and urgency</td><td><strong>Multi-class classification</strong></td><td>Small LLM with a closed label set; a fine-tuned small classifier once volume justifies it</td><td>Triage</td><td>Macro-F1 on a labelled set</td></tr>
+<tr><td>Supplier email intent</td><td><strong>Multi-class classification</strong></td><td>Small LLM router (ack · delay · price change · invoice · other)</td><td>Supplier Liaison</td><td>Routing accuracy, verifier rejects</td></tr>
+<tr><td>Supplier lead time</td><td>Distribution estimation</td><td>Empirical distribution per supplier × lane, with a survival model for open POs</td><td>Replenishment Planner</td><td>Calibration of P50/P90</td></tr>
+<tr><td>Marketing budget</td><td>Online decision-making</td><td><strong>Thompson-sampling contextual bandit</strong> for daily allocation; Bayesian media-mix model (MMM) monthly for strategy</td><td>Budget Allocator</td><td>Marginal ROAS, regret vs holdout</td></tr>
+<tr><td>Agent behaviour anomalies</td><td>Anomaly detection</td><td>EWMA / robust z-scores per metric; isolation forest across metrics</td><td>Sentinel</td><td>Time to detect, false-quarantine rate</td></tr>
+<tr><td>Competitor product match</td><td>Matching</td><td>Text + image embeddings for retrieval, LLM verifier to confirm</td><td>Competitor Monitor</td><td>Match precision</td></tr>
+<tr><td>Customer value</td><td>Regression</td><td>BG/NBD + Gamma-Gamma lifetime value</td><td>Lifecycle / CRM, refund goodwill</td><td>Calibration by cohort</td></tr>
+</table></div>
+
+<h2 id="mlops">MLOps: keeping models honest</h2>
+<div class="grid g3">
+  <div class="card"><h4>Nightly pipeline</h4><p>Azure ML pipeline at 02:00: build features → segment → train portfolio → backtest → register → infer → reconcile → publish <code>fcst-vN</code> to the Ledger by 04:00. Retrains take minutes on CPU.</p></div>
+  <div class="card"><h4>Promotion gate</h4><p>Rolling-origin backtest over the last 12 weeks. A new model is published only if WAPE is no worse than champion + 3%, bias is within ±5% and P10-P90 coverage is 75-85%. Otherwise the last good forecast stays live.</p></div>
+  <div class="card"><h4>Drift monitoring</h4><p>Feature drift (PSI), live error vs backtest error, and bias by segment. Alerts go to the Sentinel. Sustained bias triggers retraining or rollback, not a human.</p></div>
+  <div class="card"><h4>Champion / challenger</h4><p>Challengers (a foundation model, a new feature set) run in shadow every night and are compared on the same backtest. They are promoted only on evidence.</p></div>
+  <div class="card"><h4>Reproducibility</h4><p>Every forecast stores model version, feature snapshot and data watermark. Any purchase order can be traced to the exact forecast that justified it.</p></div>
+  <div class="card"><h4>Explainability</h4><p>SHAP values per forecast feed the Planner Explainer, which writes, for example: "+38% vs last month: January white sale flag, email campaign, price −10%."</p></div>
+</div>
+
+<h2 id="metrics">Evaluation metrics and targets</h2>
+<div class="table-wrap"><table>
+<tr><th>Metric</th><th>Measures</th><th class="num">Target (design)</th></tr>
+<tr><td>WAPE (weekly, A-class)</td><td>Accuracy weighted by volume</td><td class="num">≤ 25%</td></tr>
+<tr><td>Bias</td><td>Systematic over- or under-forecasting</td><td class="num">within ±5%</td></tr>
+<tr><td>Pinball loss (P10, P50, P90)</td><td>Quality of each quantile</td><td class="num">≤ champion</td></tr>
+<tr><td>P10-P90 coverage</td><td>Is the interval honest?</td><td class="num">75-85%</td></tr>
+<tr><td>Stock-out rate (A-class)</td><td>Business outcome</td><td class="num">&lt; 2% of SKU-days</td></tr>
+<tr><td>Excess cover (&gt; 16 weeks)</td><td>Business outcome: cash tied up</td><td class="num">&lt; 5% of stock value</td></tr>
+</table></div>
+<p class="muted">Targets are design targets for a premium, seasonal assortment; they are recalibrated after the first quarter of real data.</p>
+
+<h2 id="example">Worked example: the Étoile towel</h2>
+<pre><code>Before spike   fcst-v17 (nightly)     P50 3.0/day   P90 4.4/day   segment: smooth (ADI 1.05, CV² 0.31) → LightGBM
+10:02 D1       CUSUM alarm            observed 9.3/day over 36 h (3.1×), 311 distinct buyers → genuine
+10:05 D1       intraday re-forecast   P50 9.1/day   P90 13.4/day  decaying to ~1.6× over ~3 weeks · anomaly_influenced
+10:10 D1       planner (R,S)          5,000 draws of demand over lead time (P50 24 d, P90 33 d)
+               S at 97% service level → 240 units after case-pack rounding · cover cap 16 wks OK
+10:12 D1       policy                 anomaly_influenced → tier T2 → Buy Panel → 180 now + review
+D11            actuals                velocity 1.7× baseline: forecast error inside the P10-P90 band
+               learning               spike added to the external-referral set → decay prior refitted</code></pre>
+
+</div></main>
+</body>
+</html>

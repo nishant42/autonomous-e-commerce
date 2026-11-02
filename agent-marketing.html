@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marketing Allocation Agent</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deeper · D1 · Marketing allocation agent</div>
+<h1>Women 25–45: how the targeting is built, and how the budget follows the evidence</h1>
+<p class="lede">The brief asked two things. How do we actually target a defined customer base with real tools, and — more importantly — how do we stay on top of it well enough to move budget towards what worked and away from what did not. The second question is the hard one, because platform-reported performance is systematically flattering, and most reallocation decisions in small e-commerce are made on noise.</p>
+
+<div class="tldr"><span class="t">The short version</span>
+<ul>
+<li><strong>Targeting is mostly not targeting any more.</strong> On Meta and Google the audience is found by the auction, not by picked interests. The controllable levers are creative, offer, geography, exclusions and <em>signal quality</em>. The agent spends its effort there.</li>
+<li><strong>The agent never optimises ROAS.</strong> It optimises contribution margin per order and new-customer CAC, computed from Shopify cost data, returns and payment fees — not from platform-reported revenue.</li>
+<li><strong>Four clocks, not one.</strong> Hourly guards, daily pause-and-scale, weekly channel reallocation, monthly incrementality. Each clock has its own statistical bar, and the fast clocks are allowed to do only cheap, reversible things.</li>
+<li><strong>No decision below minimum exposure.</strong> A cell with 11 conversions is not a loser; it is unmeasured. The single most common way money is wasted is by acting on cells that never had a chance to speak.</li>
+</ul>
+</div>
+
+<div class="callout info"><span class="t">This is implemented, not just described</span>
+<p>The engine in <code>engine/</code> runs these rules on 90 days of seeded history with no dependencies. <code>cd engine &amp;&amp; python3 run.py ui</code> opens an operator console at <code>127.0.0.1:8787</code> where a cycle can be run and watched job by job, proposals approved or rejected, and every number clicked back to the query that produced it. <code>python3 run.py demo</code> prints the same decisions in a terminal, and <a href="engine-run.html">this static snapshot</a> is what <code>run.py console</code> generates — the same decisions, read back out of the database, with every intermediate number, the gateway's verdict on each proposal and the full audit trail.</p></div>
+<div class="toc"><a href="#audience">From a customer definition to live targeting</a><a href="#signal">Signal quality: the real lever</a><a href="#metrics">Metric definitions</a><a href="#model">The model layer</a><a href="#clocks">The four clocks</a><a href="#rules">Reallocation rules with numbers</a><a href="#worked">A worked week</a><a href="#truth">Proving it worked</a><a href="#harness">Harness, tools and policy</a><a href="#fail">Failure modes</a></div>
+
+<h2 id="audience">From "women 25–45" to live targeting</h2>
+<p>A customer definition is not a targeting spec. It is translated into five things, only some of which are set in the ad platform.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Layer</th><th>What we actually set</th><th>Tool</th><th>Why</th></tr>
+<tr><td>Geography and language</td><td>Named markets, one currency per store, excluded regions with poor delivery economics</td><td>Meta / Google campaign settings via API</td><td>The one demographic control that is both reliable and cheap to enforce. It also gives us geo holdouts for measurement.</td></tr>
+<tr><td>Age and gender</td><td>Set as a loose boundary (e.g. 25–50, all genders) rather than a hard 25–45 female filter</td><td>Platform targeting</td><td>Hard demographic filters on Meta raise CPM and exclude the buyers the model would have found. The brief's definition is a <em>hypothesis about who buys</em>, and we verify it in the data afterwards instead of forcing it upfront.</td></tr>
+<tr><td>Creative and offer</td><td>3–5 creative concepts per product, each carrying its own implicit audience signal (the visual language does the targeting)</td><td>Meta Advantage+ / Google Demand Gen asset groups, uploaded via API</td><td>This is where most of the real differentiation sits, and it is the cheapest thing to change.</td></tr>
+<tr><td>Seed and exclusion lists</td><td>Customer list uploads (hashed), purchasers excluded from acquisition, 1% lookalikes of high-margin buyers, cart abandoners for retargeting</td><td>Meta Customer Audiences API, Google Customer Match, sourced from Shopify + Klaviyo</td><td>Exclusions are the reliable half of audience control. Paying to acquire existing customers is the most common silent waste.</td></tr>
+<tr><td>Intent capture</td><td>Brand and category search terms, tightly negatived</td><td>Google Ads API (Search), Performance Max once there are 30+ conversions a month</td><td>Search catches demand the creative created. Negatives are maintained by the agent weekly from the search-terms report.</td></tr>
+</table></div>
+
+<div class="callout"><span class="t">Verification, not assumption</span>
+<p>The audience hypothesis is checked every week against who actually bought, by joining Shopify customers to self-reported survey answers and platform demographic breakdowns. If the buyers turn out to be women 35–55, that becomes a finding the verdict agent uses for the <em>next</em> product launch, and a creative brief for this one. The system is designed to discover the customer, not to defend the brief.</p></div>
+
+<h2 id="signal">Signal quality: the lever almost nobody pulls</h2>
+<p>Before any clever allocation, the conversion signal the platforms learn from has to be correct and complete. A broken or lossy signal makes every downstream decision wrong, and it is the single most common defect in small stores.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Mechanism</th><th>Implementation</th><th>Effect</th></tr>
+<tr><td>Server-side conversions</td><td>Stape GTM server container; Meta Conversions API and Google Enhanced Conversions fired from the server on Shopify order webhooks, with the same <code>event_id</code> as the browser event so they deduplicate</td><td>Recovers the conversions browser tracking loses; survives consent and browser changes</td></tr>
+<tr><td>Value sent is margin, not revenue</td><td>The order webhook computes revenue − COGS − shipping − payment fee and sends that as conversion value</td><td>The platform's bidding then optimises towards profitable orders rather than large discounted ones. This one change routinely matters more than weeks of bid tuning.</td></tr>
+<tr><td>Returns fed back</td><td>A refund webhook sends a negative-value conversion adjustment</td><td>High-return creatives and audiences stop looking like winners</td></tr>
+<tr><td>New-customer flag</td><td>Order payload includes <code>is_new_customer</code>; a separate conversion action is created for it</td><td>Lets the agent and the platform optimise acquisition rather than repeat purchases it would have had anyway</td></tr>
+<tr><td>Consent handled properly</td><td>Consent mode v2 with modelled conversions; EU traffic without consent is excluded from audience building</td><td>Legal, and avoids audiences that silently decay</td></tr>
+<tr><td>Signal health monitored</td><td>Hourly check: conversions reported by platform vs orders in Shopify, per store. Drift over 25% for two hours raises an anomaly and freezes scaling</td><td>Catches the classic disaster of a pixel breaking after a theme change while the agent happily reallocates on fiction</td></tr>
+</table></div>
+
+<h2 id="metrics">Metric definitions, written down once</h2>
+<p>Most arguments about marketing performance are arguments about definitions. These are fixed in code, computed in our own database from Shopify and ad-platform data, and every agent decision cites them.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Metric</th><th>Definition</th><th>Used for</th></tr>
+<tr><td><code>CM1</code> per order</td><td>Revenue − COGS − inbound freight − outbound shipping − payment fees − expected returns cost</td><td>The ceiling on what an order may cost to acquire</td></tr>
+<tr><td><code>CM2</code> per order</td><td>CM1 − advertising cost attributed to the order</td><td>The number the whole system maximises</td></tr>
+<tr><td><code>nCAC</code></td><td>Platform spend in a window ÷ new customers acquired in that window (from Shopify, not the platform)</td><td>Pause and scale decisions</td></tr>
+<tr><td><code>MER</code></td><td>Total store revenue ÷ total ad spend, daily, blended across channels</td><td>The sanity check that catches attribution double-counting</td></tr>
+<tr><td>Target CPA</td><td><code>CM1 × payback_factor</code>; payback factor 1.0 for a single-purchase product, up to 1.8 where repeat-purchase data supports it</td><td>The single threshold every daily rule compares against</td></tr>
+<tr><td>Minimum exposure</td><td>25 conversions, <em>or</em> spend of 12 × target CPA — at which point the absence of conversions is itself the evidence — in both cases over at least 4 days</td><td>Gate before any pause or scale decision on a cell</td></tr>
+<tr><td>Learning status</td><td>Our own check for 15 conversions per cell, overridden once spend passes the exhaustion threshold</td><td>Suppresses changes while a cell is still in learning</td></tr>
+</table></div>
+
+<div class="card" id="calc">
+<h3>Minimum-exposure calculator</h3>
+<p class="muted">The rule the agent applies before it is allowed to judge any ad set. Change the inputs to see what a decision actually costs to earn.</p>
+<div class="grid g3">
+<label>CM1 per order (€)<input id="cm1" type="number" value="24" min="1" step="1"></label>
+<label>Payback factor<input id="pb" type="number" value="1.2" min="0.5" max="3" step="0.1"></label>
+<label>Observed CPA so far (€)<input id="cpa" type="number" value="40" min="1" step="1"></label>
+</div>
+<div class="grid g3" style="margin-top:14px">
+<div class="stat"><div class="l">Target CPA</div><div class="v" id="o-target">—</div></div>
+<div class="stat"><div class="l">Spend needed before a verdict</div><div class="v" id="o-spend">—</div></div>
+<div class="stat"><div class="l">Agent action</div><div class="v" id="o-act">—</div></div>
+</div>
+<p class="caption" id="o-note"></p>
+</div>
+<script>
+(function(){
+  var ids=["cm1","pb","cpa"].map(function(i){return document.getElementById(i);});
+  function f(n){return "€"+n.toFixed(0);}
+  function run(){
+    var cm1=+ids[0].value||0, pb=+ids[1].value||0, cpa=+ids[2].value||0;
+    var target=cm1*pb, spend=Math.max(25*target, 3*target);
+    document.getElementById("o-target").textContent=f(target);
+    document.getElementById("o-spend").textContent=f(spend);
+    var act, note;
+    if(cpa<=target*0.8){act="Scale +20%"; note="CPA is comfortably inside target. Daily rule raises budget by 20%, then a 48-hour cooldown before the next raise.";}
+    else if(cpa<=target){act="Hold"; note="Inside target but without headroom. No change; the weekly bandit may still shift share towards this cell.";}
+    else if(cpa<=target*1.5){act="Reduce −20%"; note="Above target but recoverable. Budget trimmed rather than paused, so the cell keeps producing data.";}
+    else {act="Pause"; note="More than 50% above target once minimum exposure is met. Paused, creative archived with the reason, and the loss recorded against the product's experiment budget.";}
+    document.getElementById("o-act").textContent=act;
+    document.getElementById("o-note").textContent="Exposure is met at 25 conversions, or at 12x target CPA of spend, over at least 4 days. Below that, the verdict is “not yet known” and no action is taken. "+note;
+  }
+  ids.forEach(function(e){e.addEventListener("input",run);});
+  run();
+})();
+</script>
+
+<h2 id="model">The model layer: 35 features, and what earns its place</h2>
+<p>Rule bands answer "is this cell inside target". They do not answer "what is driving it, and what would happen if we changed something". That is a modelling problem, and it is run as one: <code>engines/ml.py</code> builds a panel of 35 features per cell-day and hands nothing to the allocator until it has beaten the naive baselines out of sample.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Group</th><th>Features</th><th>Where it comes from</th></tr>
+<tr><td>Spend and delivery</td><td>spend, log spend, impressions, clicks, CTR, CPM, CPC, frequency</td><td>Platform APIs, pulled hourly into our own database</td></tr>
+<tr><td>Creative</td><td>creative age, format, concept id</td><td>Our campaign plan table</td></tr>
+<tr><td>Device mix</td><td>iOS, Android, desktop, tablet share</td><td>Parsed from each order's <code>client_details</code> in the Shopify Admin API — a device signal the store owns without a tracking vendor</td></tr>
+<tr><td>Intent</td><td>category search interest, brand search interest, on-site search count, AEO citation count</td><td>Search-term reports, the storefront search log, and answer-engine monitoring</td></tr>
+<tr><td>Price and offer</td><td>price, discount, competitor price index, free-shipping flag</td><td>Our price history and a competitor feed</td></tr>
+<tr><td>Calendar and supply</td><td>day of week, weekend, payday window, stock cover days</td><td>Derived, and from the inventory snapshot</td></tr>
+</table></div>
+
+<h3>The workflow, in the order it runs</h3>
+<div class="table-wrap"><table>
+<tr><th>Step</th><th>What happens</th><th>Why it is not optional</th></tr>
+<tr><td>Cadence</td><td>Modelled on the seven-day window the allocator actually decides on, not on single cell-days</td><td>One cell-day is a handful of orders against multiplicative noise. Daily order counts gave R² 0.07 while the same panel at weekly cadence gave usable numbers</td></tr>
+<tr><td>Stationarity</td><td>Augmented Dickey-Fuller per feature <em>and on the target</em>; a differenced panel is built and evaluated alongside the levels panel</td><td>A unit root produces spurious relationships with any other trending series. Differencing the features while leaving the target in levels is the easy mistake, and it destroys the relationship instead</td></tr>
+<tr><td>Leakage guards</td><td>Two classes removed and reported before any model is fitted: features that are a calendar in disguise, and features computed from the target</td><td>A trailing seven-day order count shares six days with a seven-day target and scores 0.97 while knowing nothing. Cost per acquisition carries orders in its denominator. Both were caught by this guard during development</td></tr>
+<tr><td>Significance</td><td>Pearson r with p-values; variance inflation for collinearity</td><td>Spend and impressions are the same variable twice; coefficients are meaningless until that is seen</td></tr>
+<tr><td>Selection</td><td>LassoCV with time-series folds</td><td>Of 35 candidates, roughly a third survive. A deliberately useless vanity metric sits in the panel to confirm selection throws it away</td></tr>
+<tr><td>Families</td><td>Ridge, Lasso, random forest, gradient boosting, XGBoost — each against both panels and both target transforms</td><td>Whether the response scales linearly or multiplicatively is a question for the data. On this panel linear-in-logs beats the trees, which is what a multiplicative response should do</td></tr>
+<tr><td>Out of sample</td><td>Forward split in time with an embargo across the window; R², RMSE, MAE, and AUC on "will this cell be profitable"</td><td>A random split leaks the future into training and every model looks better than it is</td></tr>
+<tr><td>Promotion</td><td>Ships only if it clears an absolute R² floor, beats both naive baselines, and does not regress against the live model. The decision and its reason are recorded</td><td>Models that cannot beat "the same as last week" are a liability. One was held back during development for exactly that</td></tr>
+</table></div>
+
+<div class="decision"><span class="t">How the model reaches a decision, and how far it is allowed to</span>
+<dl>
+<dt>Decision</dt><dd>The allocator asks the promoted model for an expected CPA per cell, blends it with the observation, and the deterministic bands still decide. If the two disagree by more than a factor of two, the observation wins and the gap is logged as an anomaly.</dd>
+<dt>Reason</dt><dd>A model that is wrong should cost a suboptimal budget split, never an unbounded one. The bands are the containment; the model is the improvement inside it.</dd>
+<dt>Consequence</dt><dd>With no promoted model, or a stale one, the agent behaves exactly as it did before. Model availability is never a dependency for the business running.</dd>
+</dl></div>
+
+<div class="callout warn"><span class="t">On the numbers you will see in the console</span>
+<p>The demo panel is generated from a known process, so the out-of-sample R² near 0.98 is a property of the generator, not a forecast of live performance. On a real store with six months of history, expect roughly 0.3 to 0.6 on weekly orders per cell. The honest measure is whether the pipeline beats the previous-window baseline, and the workflow and guards are what carry over to real data.</p></div>
+
+<h2 id="clocks">The four clocks</h2>
+<p>Different decisions deserve different speeds and different statistical bars. Running everything on one daily loop is how budgets end up chasing noise.</p>
+
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart TB
+  subgraph H["Hourly · guards only (cheap, reversible)"]
+    h1["pace vs daily cap"]; h2["signal health: platform vs Shopify"]; h3["stock cover per SKU"]; h4["anomaly: CPM or CPA spike > 3σ"]
+  end
+  subgraph D["Daily 09:00 · pause and scale within channel"]
+    d1["minimum exposure met?"]; d2["CPA vs target bands"]; d3["creative fatigue: frequency and CTR decay"]; d4["max ±20% per ad set, 48h cooldown"]
+  end
+  subgraph W["Weekly Mon · reallocate between channels"]
+    w1["Thompson sampling on CM2 per € by channel"]; w2["±40% cap per channel"]; w3["search-term negatives"]; w4["creative refresh brief"]
+  end
+  subgraph M["Monthly · incrementality"]
+    m1["geo holdout read-out"]; m2["regression on spend vs orders (MMM-lite)"]; m3["recalibrate payback factor and target CPA"]
+  end
+  H -->|"anomaly.raised"| CT["Control tower / on-call"]
+  H --> D --> W --> M
+  M -->|"new targets"| D
+</script>
+</div>
+<p class="caption">Figure D1.1: Fast clocks act only on things that are cheap to undo. Anything that changes a target or a channel split happens slowly, on evidence.</p>
+
+<h2 id="rules">Reallocation rules, with the actual numbers</h2>
+
+<h3>Daily rules (within a channel)</h3>
+<div class="table-wrap"><table>
+<tr><th>Condition</th><th>Action</th><th>Guard</th></tr>
+<tr><td>Exposure below minimum (fewer than 25 conversions <em>and</em> less than 12 × target CPA spent, or fewer than 4 days)</td><td>No action</td><td>R7. A cell is never killed for being young.</td></tr>
+<tr><td>Ad set still in learning (under 15 conversions) <em>and</em> spend below 12 × target CPA</td><td>No budget change unless pacing is breached</td><td>Edits restart learning and destroy the data we just paid for</td></tr>
+<tr><td>CPA ≤ 80% of target, exposure met</td><td>Budget +20%</td><td>48-hour cooldown per ad set; never more than +20% in a day, because larger jumps re-enter learning</td></tr>
+<tr><td>CPA between 80% and 100% of target</td><td>Hold</td><td>—</td></tr>
+<tr><td>CPA between 100% and 150% of target</td><td>Budget −20%</td><td>Floor: never below the budget that keeps the cell measurable (target CPA ÷ 3 per day)</td></tr>
+<tr><td>CPA above 150% of target, exposure met</td><td>Pause, archive creative with reason, record spend against the product's experiment budget</td><td>Maximum 3 pauses per product per day, so one bad day cannot switch a product off entirely</td></tr>
+<tr><td>Frequency above 2.5 in 7 days and CTR down more than 25% from the cell's own first-week baseline</td><td>Flag creative fatigue, request a refresh, cap budget at current level</td><td>Distinguishes a tired creative from a bad audience — the same symptom, opposite fixes</td></tr>
+<tr><td>Stock cover under 2 weeks on the advertised SKU</td><td>Acquisition spend on that SKU off; retargeting and back-in-stock capture on</td><td>R5, deterministic. Marketing may not sell what procurement cannot supply.</td></tr>
+<tr><td>Signal drift over 25% for 2 hours</td><td>Freeze all scaling, raise anomaly, keep spend flat</td><td>Fail safe, not fail off: freezing is reversible, switching everything off loses the week</td></tr>
+</table></div>
+
+<h3>Weekly rule (between channels)</h3>
+<p>Channel-level allocation is a bandit problem with a slow clock: each channel is an arm, the reward is CM2 per euro spent, and the agent samples from the posterior rather than greedily chasing last week's winner.</p>
+<pre>weekly_allocation:
+  arms: [meta_prospecting, meta_retargeting, google_search, google_pmax, tiktok, klaviyo_paid_push]
+  reward: CM2_per_euro            # from our ledger, 14-day attribution window, returns net
+  method: thompson_sampling       # Beta-Binomial on "profitable order per € band"
+  priors: inherited from the two best-performing past products (cross-product memory)
+  constraints:
+    min_share_per_arm: 0.05       # never starve an arm to the point it stops being measurable
+    max_share_per_arm: 0.55       # never a single point of failure
+    max_weekly_change_per_arm: 0.40
+    exploration_floor: 0.10       # 10% of budget always on untested creative or arms
+    holdout_geo_share: 0.10       # measurement, not spend efficiency
+  escalate_if:
+    total_budget_change_pct > 25  # a big swing goes to a human with the evidence attached
+    any_arm_to_zero: true</pre>
+
+<div class="decision"><span class="t">Why a bandit and not "move money to the best ROAS"</span>
+<dl>
+<dt>Decision</dt><dd>Sample allocations from the posterior distribution of each channel's profit per euro, with a 10% exploration floor and a 5% minimum share.</dd>
+<dt>Reason</dt><dd>Greedy reallocation on small samples is a machine for amplifying noise: the arm that got lucky last week gets the money, stops being compared fairly, and the system locks onto it. With 50–300 orders a week per product, the noise is larger than most of the differences being acted on.</dd>
+<dt>Consequence</dt><dd>Slightly lower short-term efficiency in exchange for not losing the genuinely better channel, and a posterior that becomes a reusable prior for the next product launch.</dd>
+</dl></div>
+
+<h2 id="worked">A worked week, as the console shows it</h2>
+<p>Product: a linen bedding set. Target CPA €29 (CM1 €24 × payback 1.2). Weekly budget €3,500. What the agent did on Monday, and why.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Cell</th><th>Spend</th><th>Orders</th><th>CPA</th><th>CM2 / €</th><th>Agent action</th><th>Rule</th></tr>
+<tr><td>Meta · prospecting · "morning light" video</td><td>€980</td><td>44</td><td>€22</td><td>+0.09</td><td>+20% → €1,176</td><td>Daily: CPA ≤ 80% of target, exposure met, cooldown clear</td></tr>
+<tr><td>Meta · prospecting · "fabric close-up" static</td><td>€620</td><td>14</td><td>€44</td><td>−0.18</td><td>Paused</td><td>Daily: 152% of target, 14 conversions but €620 &gt; 3 × target CPA and 6 days elapsed → exposure met</td></tr>
+<tr><td>Meta · retargeting</td><td>€310</td><td>26</td><td>€12</td><td>+0.31</td><td>Hold, flagged</td><td>Looks excellent and is partly double-counted; the weekly geo holdout read-out governs its share, not its reported CPA</td></tr>
+<tr><td>Google · brand search</td><td>€140</td><td>19</td><td>€7</td><td>+0.44</td><td>Hold at cap</td><td>Capped: brand search mostly harvests demand the other channels created. Raising it buys clicks we would have had.</td></tr>
+<tr><td>Google · PMax</td><td>€870</td><td>21</td><td>€41</td><td>−0.12</td><td>−20% → €696, 9 negatives added</td><td>Daily: 141% of target, but search-term report shows 31% of spend on an irrelevant term cluster → trim and negative rather than pause</td></tr>
+<tr><td>TikTok · test</td><td>€280</td><td>5</td><td>€56</td><td>−0.41</td><td>No action</td><td>R7: only 5 conversions and €280 &lt; 3 × €29 × 4 days. Not yet known. Continues to the exposure threshold or the test budget's end.</td></tr>
+<tr><td>Geo holdout (10% of regions)</td><td>€0</td><td>11</td><td>—</td><td>—</td><td>Protected</td><td>Baseline sales with no spend. 11 orders here is what makes the other rows interpretable.</td></tr>
+</table></div>
+
+<div class="callout info"><span class="t">What the holdout row changes</span>
+<p>Reported orders across the paid cells total 129. The holdout says roughly 9% of orders would have happened anyway. The agent therefore discounts incremental performance by that factor before the weekly reallocation, which moved the "fabric close-up" cell from "below target" to "clearly unprofitable" and protected the system from scaling retargeting, whose apparent €12 CPA is mostly harvesting. Without the holdout, the correct decision and the wrong decision look identical.</p></div>
+
+<h2 id="truth">Proving that a reallocation worked</h2>
+<div class="table-wrap"><table>
+<tr><th>Method</th><th>Cadence</th><th>Cost</th><th>What it answers</th><th>When we use it</th></tr>
+<tr><td>Geo holdout</td><td>Always on, 10% of regions</td><td>Free (foregone spend)</td><td>How many orders would have happened anyway</td><td>From day one. The cheapest truth available to a small store.</td></tr>
+<tr><td>Post-purchase survey</td><td>Every order, Klaviyo</td><td>Free</td><td>Self-reported first touch, which corrects platform self-attribution</td><td>From day one; 30–60% response is enough to detect gross distortion</td></tr>
+<tr><td>Blended MER trend</td><td>Daily</td><td>Free</td><td>Whether total spend is producing total revenue, regardless of attribution</td><td>Always, as the sanity check that overrides any single channel's story</td></tr>
+<tr><td>Spend-response regression (MMM-lite)</td><td>Monthly, once 12+ weeks of history</td><td>Free, ours</td><td>Diminishing returns per channel, so the bandit's caps are set on evidence</td><td>From month 3</td></tr>
+<tr><td>Conversion-lift studies / Haus-class geo experiments</td><td>Quarterly</td><td>€0 – €1,500</td><td>Causal channel lift at a decent confidence level</td><td>Only once a product spends over €25k a month. Below that, the experiment cannot resolve the effect.</td></tr>
+</table></div>
+
+<h2 id="harness">The harness for this agent</h2>
+<pre>agent: marketing_allocator
+version: 4
+model:
+  plan: claude-sonnet-5-5
+  max_steps: 10
+  token_budget_month: 900_000
+
+reads:
+  - ad_metrics(platform, level, from, to)      # our DB, hourly poller, never the UI
+  - orders_panel(store, from, to)              # Shopify truth: orders, new-customer, returns
+  - margin_table(sku)                          # COGS, freight, fees
+  - stock_cover(sku)
+  - creative_history(cell)                     # frequency, CTR curve, first-week baseline
+  - holdout_readout(store, week)
+  - experiment_budget(product)                 # how much this product has left to spend learning
+
+writes:
+  - propose_budget_change{cell, from_eur, to_eur, reason, evidence[]}
+  - propose_pause{cell, reason, evidence[]}
+  - propose_negatives{campaign, terms[], reason}
+  - request_creative{product, brief, fatigue_evidence}
+  - raise_anomaly{kind, severity, note}
+
+engines:
+  bands: cpa_band_rules_v2          # deterministic daily rules
+  allocator: thompson_v1            # deterministic weekly sampler
+
+policy:
+  daily_spend_cap_eur_per_store: 600
+  portfolio_daily_cap_eur: 3_000
+  max_change_pct_per_cell_per_day: 20
+  cooldown_hours_per_cell: 48
+  max_pauses_per_product_per_day: 3
+  autonomy:
+    auto_execute: [budget_change ≤ 20%, pause, negatives]
+    maker_checker: [weekly channel reallocation, new campaign launch]
+    human_signal: [budget above portfolio cap, any new platform, any creative to a cold audience with a claim]
+  freeze_on: [signal_drift > 25%, payment_failure, stock_cover < 14d, anomaly severity ≥ high]
+
+verify:
+  - sum_of_proposed_budgets ≤ portfolio_daily_cap
+  - every_cell_change_cites_exposure_and_cpa_evidence
+  - no_change_to_a_cell_in_cooldown
+  - no_acquisition_spend_on_sku_with_cover_lt_14d
+  - holdout_geo_untouched</pre>
+
+<p>Two details matter more than the rest. First, the agent reads <strong>our</strong> copy of ad metrics, pulled hourly into Postgres, never the platform UI — so every decision can be replayed against the exact data that produced it. Second, <code>propose_*</code> is the only way anything reaches a platform; the gateway holds the API credentials, applies the caps, writes the ledger entry, and calls Meta or Google with an idempotency key. The model cannot spend money directly, by construction.</p>
+
+<h2 id="fail">Failure modes, and what catches each</h2>
+<div class="table-wrap"><table>
+<tr><th>Failure</th><th>How it shows up</th><th>Control</th></tr>
+<tr><td>Pixel or CAPI breaks after a theme change</td><td>Reported conversions collapse; the agent would pause good cells</td><td>Hourly platform-vs-Shopify reconciliation; drift over 25% freezes scaling and raises an anomaly</td></tr>
+<tr><td>A press mention or viral post inflates everything</td><td>Every cell looks profitable; the agent scales into a one-off</td><td>Daily rules compare against a robust (winsorised) baseline; a day flagged as an anomaly is excluded from scale decisions and the spike is logged as an event</td></tr>
+<tr><td>Attribution double-counting</td><td>Sum of channel-reported revenue exceeds store revenue</td><td>MER and holdout override channel reports; retargeting is share-capped rather than trusted</td></tr>
+<tr><td>Learning-phase churn</td><td>Constant small edits, CPA degrades for no visible reason</td><td>Cooldowns, ±20% caps, and a hard rule against edits during learning</td></tr>
+<tr><td>Budget leak on a dying product</td><td>Spend continues on something the portfolio already knows is failing</td><td>Experiment budget per product is a hard counter; when it is exhausted the allocator cannot spend on it without a human signal</td></tr>
+<tr><td>Agent loops or burns tokens</td><td>Cost per decision rises</td><td>Max 10 steps, monthly token budget, degrade to rules-only mode on exhaustion, cost per decision on the dashboard</td></tr>
+<tr><td>Creative claim risk</td><td>An ad makes a claim the product cannot support</td><td>Creative to cold audiences is human-signed. The agent allocates money; it does not invent claims.</td></tr>
+</table></div>
+
+<div class="callout"><span class="t">What a human sees each Monday</span>
+<p>One page per product: spend, orders, CM2, the holdout-adjusted incremental figure, every change the agent made with the rule that caused it, the cells still below minimum exposure, and the remaining experiment budget. The merchandiser's job is to disagree with it — and because each line carries its rule and its evidence ids, disagreeing takes a minute rather than an afternoon.</p></div>
+
+</div></main>
+</body>
+</html>

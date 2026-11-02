@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Harness</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deep dive A · Agent harness</div>
+<h1>The harness is what makes a stateless model safe to run a company</h1>
+<p class="lede">A model is a stateless function from text to text. It has no memory, no permissions, no notion of truth and no stopping condition. Everything that makes it an <em>agent</em> is the <strong>harness</strong>: the deterministic runtime that decides what the model sees, what it may touch, when it must stop, whether its output is valid, and what is remembered.</p>
+
+<div class="tldr"><span class="t">The one rule</span>
+<ul>
+  <li><strong>The harness enforces integrity. The prompt shapes intent.</strong> The harness does format validation, closed enums, existence and ownership checks, limits and persistence, and returns structured errors so the model can self-correct. The prompt and tool descriptions guide judgement: which option, what tone, when to ask.</li>
+  <li>If the harness is making a judgement about <em>meaning</em>, it is in the wrong place. If the prompt is responsible for an <em>invariant</em>, it is in the wrong place.</li>
+</ul></div>
+
+<h2 id="arch">Harness architecture</h2>
+<div class="diagram arch-wrap"><div class="arch-view"><svg class="arch" viewBox="0 0 1200 620" role="img" aria-label="Agent harness architecture" style="min-width:760px"><defs><marker id="ah-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahp" d="M0 0L10 5L0 10z"/></marker><marker id="ahb-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahb" d="M0 0L10 5L0 10z"/></marker></defs><rect class="box ext" x="20" y="240" width="150" height="110" rx="10"/><text class="t" x="32" y="262">Trigger</text><text class="s" x="32" y="280">Service Bus event or</text><text class="s" x="32" y="296">Temporal activity</text><text class="s" x="32" y="312">→ task envelope:</text><text class="s" x="32" y="328">version, budgets, ID</text><rect class="zone " x="200" y="110" width="800" height="400" rx="14"/><rect class="box " x="220" y="250" width="140" height="80" rx="10"/><text class="t" x="232" y="272">1 Guard</text><text class="s" x="232" y="290">kill switch,</text><text class="s" x="232" y="306">quarantine, budgets</text><rect class="box " x="375" y="250" width="140" height="80" rx="10"/><text class="t" x="387" y="272">2 Context</text><text class="s" x="387" y="290">snapshot, memory,</text><text class="s" x="387" y="306">rules, result IDs</text><rect class="box " x="530" y="250" width="140" height="80" rx="10"/><text class="t" x="542" y="272">3 Tool loop</text><text class="s" x="542" y="290">max 8 rounds,</text><text class="s" x="542" y="306">180 s, token cap</text><rect class="box " x="685" y="250" width="140" height="80" rx="10"/><text class="t" x="697" y="272">4 Verify</text><text class="s" x="697" y="290">code checks, then</text><text class="s" x="697" y="306">a separate judge</text><rect class="box " x="840" y="250" width="140" height="80" rx="10"/><text class="t" x="852" y="272">5 Commit</text><text class="s" x="852" y="290">proposal, save turn,</text><text class="s" x="852" y="306">clean memory</text><path class="ln " d="M360,290 L375,290" marker-end="url(#ah-h)"/><path class="ln " d="M515,290 L530,290" marker-end="url(#ah-h)"/><path class="ln " d="M670,290 L685,290" marker-end="url(#ah-h)"/><path class="ln " d="M825,290 L840,290" marker-end="url(#ah-h)"/><path class="ln " d="M170,295 L220,295" marker-end="url(#ah-h)"/><rect class="box ok" x="530" y="380" width="140" height="82" rx="10"/><text class="t" x="542" y="402">Tool gateway</text><text class="s" x="542" y="420">allow-list, schema,</text><text class="s" x="542" y="436">IDs exist + owned,</text><text class="s" x="542" y="452">keep full by ID</text><path class="ln " d="M585,330 L585,380" marker-end="url(#ah-h)" marker-start="url(#ah-h)"/><text class="lbl" x="598" y="360">errors go back</text><rect class="box ext" x="530" y="535" width="140" height="60" rx="10"/><text class="t" x="542" y="557">Read tools (MCP)</text><text class="s" x="542" y="575">Ledger, AI Search, ML</text><path class="ln " d="M600,462 L600,535" marker-end="url(#ah-h)"/><rect class="box ext" x="500" y="20" width="150" height="60" rx="10"/><text class="t" x="512" y="42">AI gateway (APIM)</text><text class="s" x="512" y="60">quotas, routing, safety</text><rect class="box ext" x="690" y="20" width="160" height="60" rx="10"/><text class="t" x="702" y="42">Foundry model</text><text class="s" x="702" y="60">small · mid · frontier</text><path class="ln " d="M575,250 L575,80" marker-end="url(#ah-h)" marker-start="url(#ah-h)"/><text class="lbl" x="582" y="170">model call</text><path class="ln " d="M650,50 L690,50" marker-end="url(#ah-h)"/><rect class="box bad" x="220" y="380" width="140" height="60" rx="10"/><text class="t" x="232" y="402">Stop</text><text class="s" x="232" y="420">fallback policy runs</text><path class="ln bad" d="M290,330 L290,380" marker-end="url(#ahb-h)"/><rect class="box warn" x="1030" y="250" width="150" height="80" rx="10"/><text class="t" x="1042" y="272">Action Gateway</text><text class="s" x="1042" y="290">policy · limits · tier</text><path class="ln " d="M980,290 L1030,290" marker-end="url(#ah-h)"/><rect class="box bad" x="1030" y="400" width="150" height="60" rx="10"/><text class="t" x="1042" y="422">Escalate</text><text class="s" x="1042" y="440">marked incomplete</text><path class="ln bad dash" d="M755,330 L755,430 L1030,430" marker-end="url(#ahb-h)"/><text class="lbl" x="780" y="422">verify fails / round cap hit</text><rect class="band" x="220" y="478" width="760" height="24" rx="6"/><text class="s" x="232" y="494">Every step emits OpenTelemetry spans → App Insights and Foundry tracing</text><text class="zone-t" x="214" y="132">Agent harness · Container App · its own managed identity</text></svg></div></div>
+<p class="caption">Agent harness: the code wrapped around every agent. The model only decides; everything in the box checks, limits and records it.</p>
+<div class="table-wrap"><table>
+<tr><th>Part</th><th>What it does, in one line</th></tr>
+<tr><td>Task envelope</td><td>Says which agent version runs, with what budget, and an ID so a retry can't run it twice.</td></tr>
+<tr><td>Kill switch check</td><td>A paused or quarantined agent never starts.</td></tr>
+<tr><td>Context resolver</td><td>Builds exactly what the model sees: the facts, short memory and relevant rules. Nothing else.</td></tr>
+<tr><td>Tool loop</td><td>Model thinks, calls a tool, reads the answer, repeats. At most 8 times in 3 minutes.</td></tr>
+<tr><td>Tool gateway</td><td>Checks every tool call: allowed, well-formed, and pointing at things that really exist.</td></tr>
+<tr><td>Verifier</td><td>Plain checks first, then a different model reviews risky output.</td></tr>
+<tr><td>Commit</td><td>Turns the decision into a proposal for the Action Gateway and saves the conversation safely.</td></tr>
+</table></div>
+
+<h2>The seven stages</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  S1["① Intake<br/>task envelope<br/>idempotency · version pin<br/>budgets"] --> S2["② Context<br/>engineering<br/>typed snapshot · memory<br/>policies · handles"]
+  S2 --> S3["③ Agentic loop<br/>reason → act → observe<br/>≤ 8 rounds · 180 s"]
+  S3 <--> S4["④ Tool gateway<br/>schema · enum · ownership<br/>truncation · resultId"]
+  S3 --> S5["⑤ Verification<br/>deterministic checks<br/>+ independent checker"]
+  S5 --> S6["⑥ Commit & memory<br/>proposal → Action Gateway<br/>persist · summarise (hygiene)"]
+  S6 --> S7["⑦ Observe & evaluate<br/>traces · cost · sampling<br/>→ eval datasets"]
+  S7 -. "regressions →<br/>quarantine / fix" .-> S1
+  G["Guardrails across all stages:<br/>content safety · injection shields · kill-switch check · token quotas"] -.-> S2 & S3 & S4 & S6
+</script>
+</div>
+<p class="caption">Figure A.1: Harness stages. Stages ③ and ④ loop. Guardrails apply at every stage.</p>
+
+<h3>① Intake</h3>
+<div class="grid g2">
+  <div class="card"><h4>What happens</h4><ul>
+    <li>A workflow activity or event handler creates a <strong>task envelope</strong>: agent ID and pinned version, task type, business key, correlation ID, idempotency key, deadline, token and tool-round budget.</li>
+    <li>The kill-switch and quarantine registry is checked first. A halted agent never starts.</li>
+    <li>Deduplication: if the idempotency key already completed, the stored result is returned.</li>
+  </ul></div>
+  <div class="card"><h4>Why it matters</h4><p>Pinning prompt, tools and model version together makes every decision reproducible. Budgets set here are enforced mechanically later, so cost and latency are bounded before the first token.</p></div>
+</div>
+
+<h3>② Context engineering</h3>
+<p>The single biggest lever on quality. A <strong>resolver</strong> builds what the model sees on this turn, from typed inputs only. It never scrapes free-form blobs or guesses.</p>
+<div class="table-wrap"><table>
+<tr><th>Block</th><th>Content</th><th>Rule</th></tr>
+<tr><td>Instructions</td><td>System prompt: mandate, scope, decision rules, output contract</td><td>Versioned with the agent; changes are evaluation-gated.</td></tr>
+<tr><td>Task snapshot</td><td>Typed state for this task with an <code>as_of</code> watermark</td><td>Required fields missing → the task fails loudly. No "best effort" substitute.</td></tr>
+<tr><td>Anchor vs current focus</td><td>What this thread or case is about vs what triggered this turn</td><td>If they differ, a <em>drift</em> note tells the model to clarify or default to the anchor.</td></tr>
+<tr><td>Memory</td><td>Rolling summary + durable facts + short verbatim tail</td><td>First turn gets full context; follow-ups get a light reference and must call tools for fresh detail.</td></tr>
+<tr><td>Recent tool-result handles</td><td><code>resultId</code> + tool + args + short preview</td><td>Lets the model say "use result r_42" instead of re-deriving or paraphrasing data.</td></tr>
+<tr><td>Policies</td><td>Only the policy snippets relevant to this task (retrieved), with IDs</td><td>Cited in the rationale; no whole policy manual in context.</td></tr>
+<tr><td>Untrusted content</td><td>Supplier email body, customer message, web text</td><td>Delimited and labelled as data (spotlighting). Kept separate from the trusted developer context so safety filters do not confuse the two.</td></tr>
+</table></div>
+
+<h3>③ Agentic loop</h3>
+<pre><code>// Simplified harness loop (TypeScript-flavoured pseudocode)
+async function runAgent(task: TaskEnvelope): Promise&lt;AgentResult&gt; {
+  assertNotHalted(task.agent);                              // kill switch / quarantine
+  const ctx = await resolveContext(task);                   // stage ②: typed, fails loudly
+  const abort = AbortSignal.timeout(task.deadlineMs ?? 180_000);  // one shared deadline
+  let res = await model.respond({ instructions: agent.prompt, input: ctx, tools: agent.tools }, { signal: abort });
+
+  for (let round = 0; round &lt; agent.maxToolRounds /* 8 */; round++) {
+    const calls = res.toolCalls();
+    if (calls.length === 0) break;
+    const outputs = await Promise.all(calls.map(c =&gt; toolGateway.execute(task, c)));  // stage ④
+    budget.charge(res.usage);                                // token budget enforced per round
+    res = await model.respond({ previous: res.id, toolOutputs: outputs }, { signal: abort });
+  }
+
+  if (res.hitRoundCeiling) return escalate(task, "tool-round ceiling", res);   // honest, not silent
+  const output = parseStrict(agent.outputSchema, res.text);                    // typed or fail
+  const verdict = await verify(task, output);                                  // stage ⑤
+  if (!verdict.pass) return retryOrEscalate(task, verdict);
+  return commit(task, output);                                                 // stage ⑥
+}</code></pre>
+<div class="grid g3">
+  <div class="card"><h4>Bounded</h4><p>Maximum tool rounds (8), one shared wall-clock deadline (so per-round timeouts cannot add up past it), and token budgets per task and per agent per day.</p></div>
+  <div class="card"><h4>Parallel where safe</h4><p>Independent read tools run concurrently. Writes are never tools; they are proposals, handled in stage ⑥.</p></div>
+  <div class="card"><h4>Honest ceilings</h4><p>If the loop hits its limit, the result is marked incomplete and escalated. The harness never makes up a confident answer.</p></div>
+</div>
+
+<h3>④ Tool gateway (validation boundary)</h3>
+<div class="table-wrap"><table>
+<tr><th>Check</th><th>Example</th><th>On failure</th></tr>
+<tr><td>Allow-list</td><td>Is <code>issue_refund</code> on the Creative Agent's list? No, and it was never shown to it.</td><td>Security event + anomaly signal</td></tr>
+<tr><td>Schema + closed enums</td><td><code>channel ∈ {edi, email, portal, api}</code></td><td>Structured error returned to the model</td></tr>
+<tr><td>Format</td><td>ID formats, ISO currency, positive quantities</td><td>Structured error (catches hallucinated IDs before they reach the DB)</td></tr>
+<tr><td>Existence + ownership</td><td>Does SKU X belong to PO Y, and is PO Y with supplier Z?</td><td>Structured error: the model re-queries and self-corrects</td></tr>
+<tr><td>Alias normalisation</td><td>"Etoile white bath" → canonical SKU via the declared synonym table only</td><td>Ambiguous → return candidates, never pick silently</td></tr>
+<tr><td>Output shaping</td><td>Large result sets truncated for the model; full result cached by <code>resultId</code></td><td>n/a: saves tokens without losing data</td></tr>
+<tr><td>Reference-only tools</td><td>Schema dictionary, methodology docs</td><td>Excluded from memory and export, so internals do not leak into later turns</td></tr>
+</table></div>
+
+<div class="callout danger"><span class="t">Anti-patterns the harness forbids</span>
+<ul>
+  <li><strong>Silently inferring a missing argument</strong> (e.g. defaulting <code>page</code> or <code>supplier</code>). This hides a contract violation, so the model never learns it made a mistake.</li>
+  <li><strong>Silently downgrading a plan</strong> when IDs do not resolve, e.g. showing "all items" when the model named one unknown item. If the IDs are wrong, return an error. Being "forgiving" here is actively wrong.</li>
+  <li><strong>Synthesising user-facing text on the model's behalf</strong> ("Done!") when the model produced none. Fail honestly and fix the prompt.</li>
+  <li><strong>Returning <code>ok: true</code> and then discarding the model's output later.</strong> The model cannot learn from feedback it never receives.</li>
+</ul></div>
+
+<h3>⑤ Verification</h3>
+<p>Deterministic checks run first because they are cheap and exact: arithmetic, sums, ranges, referential integrity, policy pre-check. An <strong>independent checker</strong> runs second for anything customer-facing, money-moving or T2. The checker uses a different prompt, ideally a different model family, and read-only tools. The maker never marks its own work.</p>
+
+<h3>⑥ Commit and memory</h3>
+<ul>
+  <li>Side effects leave only as <strong>Action Proposals</strong> to the Action Gateway. The harness itself holds no vendor credentials.</li>
+  <li>The harness persists the turn: messages, tool-call log (resultId, args, preview, audit metadata such as caller identity and scope), verifier verdict, cost.</li>
+  <li><strong>Memory hygiene</strong>: the summariser skips refusals, failures and unverified claims; stacked refusals are filtered from the replay tail; infrastructure errors (e.g. a content-safety block) use a message that is distinct from a model refusal, so they are never learned as behaviour.</li>
+</ul>
+
+<h3>⑦ Observe and evaluate</h3>
+<p>Every stage emits OpenTelemetry spans: task → model call → tool call → proposal → execution, with token counts, cost, latency, validation errors and verifier verdicts. The Sentinel watches these as behaviour metrics, and a daily sample goes to the Auditor and into the evaluation datasets. See <a href="evaluation.html">Evaluation & observability</a>.</p>
+
+<h2>Model decides vs harness decides</h2>
+<div class="grid g2">
+  <div class="card"><h4>The model decides</h4><ul>
+    <li>Whether to answer directly, call tools or ask a clarifying question</li>
+    <li>Which tools, in what order</li>
+    <li>How to trade off options, e.g. expedite vs split vs wait</li>
+    <li>What to say, and in what tone</li>
+    <li>Which Action Proposal to make, with what parameters</li>
+  </ul></div>
+  <div class="card"><h4>The harness decides</h4><ul>
+    <li>What context exists this turn</li>
+    <li>Which tools exist at all for this agent</li>
+    <li>Whether arguments are valid, exist and are owned</li>
+    <li>When the loop stops (rounds, time, tokens)</li>
+    <li>Whether output passes verification</li>
+    <li>What is remembered and what is forgotten</li>
+    <li>Whether a proposal executes (via the gateway)</li>
+  </ul></div>
+</div>
+
+</div></main>
+</body>
+</html>

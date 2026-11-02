@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Verdict Agent</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deeper · D3 · Product verdict agent</div>
+<h1>Is it the product, or is it the site? The agent that decides what to kill</h1>
+<p class="lede">You said it yourself: of ten launches, two do well, two are ambiguous and need tweaking — and you do not know whether the problem is the product or the site — and the rest is crap you get rid of. That ambiguity is the most expensive thing in the whole model, so the third agent I would build is the one that resolves it. It is also the agent that tells the other two where to spend, which is why I chose it over pricing or customer care.</p>
+
+<div class="callout info"><span class="t">This is implemented, not just described</span>
+<p>The engine in <code>engine/</code> runs these rules on 90 days of seeded history with no dependencies: <code>cd engine &amp;&amp; python3 run.py ui</code> opens the operator console, where the four verdicts below appear with their benchmark bands and the kill sits in the approval queue — which is the only place it can be signed off. <a href="engine-run.html">This static snapshot</a> shows the same run.</p></div>
+
+<div class="tldr"><span class="t">The short version</span>
+<ul>
+<li><strong>Few orders has four different causes</strong> — traffic, site, offer, economics — and each has a different remedy. The agent separates them by funnel <em>signature</em>, not by the order count.</li>
+<li><strong>A product that was out of stock is never killed.</strong> It was being judged on sales it was not allowed to make. This is the towel case arriving in a different agent.</li>
+<li><strong>Every product gets a fixed experiment budget.</strong> When it is spent without a verdict, the default is kill, not "let it run another month".</li>
+<li><strong>A kill is never autonomous.</strong> It stops spend, clears stock and releases a domain, so it is held for a human with the whole case attached. Everything else — fix the site, reprice, new creative, scale — the agent does.</li>
+</ul>
+</div>
+
+<div class="toc"><a href="#why">Why this agent and not another</a><a href="#signature">The discriminator</a><a href="#output">What it produced on real data</a><a href="#budget">Experiment budget and the kill rule</a><a href="#runbook">The kill runbook</a><a href="#memory">What compounds across launches</a><a href="#harness">Harness and policy</a><a href="#fail">Failure modes</a></div>
+
+<h2 id="why">Why this one is the most important of the three</h2>
+<div class="table-wrap"><table>
+<tr><th>Candidate third agent</th><th>What it would be worth</th><th>Why not first</th></tr>
+<tr><td><strong>Product verdict (chosen)</strong></td><td>Decides where the marketing budget and the working capital go. A wrong "keep" costs three months of spend plus a reorder on a dead product; a wrong "kill" loses one of the two winners that pay for everything</td><td>—</td></tr>
+<tr><td>Pricing agent</td><td>Real margin upside, and the engine already derives elasticity</td><td>Pointless until you know which products deserve to exist. Its best moves are also one of this agent's verdicts (<code>REPRICE</code>)</td></tr>
+<tr><td>Customer care agent</td><td>Saves hours and improves reviews</td><td>At ten products the ticket volume does not justify it, and refund reasons — the valuable signal — are already read by this agent</td></tr>
+<tr><td>Supplier liaison</td><td>Removes the most tedious human work</td><td>Mostly adapters, not intelligence. Worth building, but it does not change what gets sold</td></tr>
+</table></div>
+
+<h2 id="signature">The discriminator: same symptom, four causes</h2>
+<p>Each stage rate is compared with a band, and it is the <em>pattern</em> of which stages are inside and outside the band that names the owner of the problem.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Signature</th><th>Owner</th><th>Verdict</th><th>What the agent does</th></tr>
+<tr><td>Ad CTR below band, everything downstream normal</td><td>Traffic</td><td><code>NEW_CREATIVE</code></td><td>Requests creative; no budget change, because the product has not been judged yet — nobody clicked</td></tr>
+<tr><td>Product page reached, add-to-cart healthy, cart-to-checkout collapses</td><td>Site</td><td><code>FIX_SITE</code></td><td>Ranked fixes: delivery cost and date on the page, express wallets, trust copy above the cart. Re-judge after the fix, not before</td></tr>
+<tr><td>Checkout started, few complete</td><td>Site</td><td><code>FIX_SITE</code></td><td>Payment methods and 3DS failures, forced account creation, shipping thresholds</td></tr>
+<tr><td>People reach the product and do not add it</td><td>Product / offer</td><td><code>REPRICE</code>, then kill if unmoved</td><td>Price and bundle test first, because creative cannot fix an offer people have understood and declined</td></tr>
+<tr><td>Converts fine, refunds above band</td><td>Product</td><td><code>KILL</code> (human)</td><td>Refund reasons pulled and raised with the supplier. A product with this return rate cannot be scaled profitably</td></tr>
+<tr><td>Every rate inside band, CPA above target</td><td>Economics</td><td><code>REPRICE</code></td><td>The funnel can carry a higher price; if the price cannot move, the product does not clear its acquisition cost</td></tr>
+<tr><td>Every rate inside band, CPA within target</td><td>—</td><td><code>SCALE</code></td><td>Releases budget to the marketing agent and raises the reorder trigger</td></tr>
+<tr><td>Any of the above while a variant is out of stock</td><td>Supply</td><td>verdict withheld</td><td>Reorder first. A starved product is not a failed product, and a kill is suppressed outright</td></tr>
+<tr><td>Below minimum exposure (1,500 sessions, €400 spent)</td><td>—</td><td><code>CONTINUE_TEST</code></td><td>No decision at all. "Not yet known" is a valid answer and the cheapest one</td></tr>
+</table></div>
+
+<h2 id="output">What it produced on the seeded portfolio</h2>
+<p>Four products, same rules, no hand-tuning. This is copied from the run, not written for the page.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Product</th><th>Add-to-cart</th><th>Cart → checkout</th><th>Refunds</th><th>CPA vs target</th><th>Verdict</th><th>Gateway</th></tr>
+<tr><td>Towel</td><td>9.4% ok</td><td>66% ok</td><td>5.2% ok</td><td>€23 vs €36</td><td><strong>SCALE</strong> (85%)</td><td>executed — with "reorder the out-of-stock variant first: 0 days cover means part of demand is unservable"</td></tr>
+<tr><td>Lamp</td><td>10.9% ok</td><td>69% ok</td><td>2.7% ok</td><td>€47 vs €73</td><td><strong>SCALE</strong> (85%)</td><td>executed</td></tr>
+<tr><td>Mug set</td><td>10.4% ok</td><td><strong>33% low</strong></td><td>5.5% ok</td><td>€20 vs €26</td><td><strong>FIX_SITE</strong> (80%)</td><td>executed — three ranked fixes, product not blamed</td></tr>
+<tr><td>Candle</td><td><strong>2.7% low</strong></td><td>64% ok</td><td><strong>10.7% high</strong></td><td>€32 vs €5</td><td><strong>KILL</strong> (75%)</td><td><em>pending human</em> — T3, with the runbook attached</td></tr>
+</table></div>
+
+<div class="callout"><span class="t">Read the two ambiguous ones</span>
+<p>The mug and the candle would both show up in a spreadsheet as "sells a bit, loses money". They get opposite verdicts, for reasons a person can check in one line each: the mug's buyers want it and the checkout loses them; the candle's visitors see it, decline it, and the ones who buy send it back. That is the distinction you said you cannot currently make, and it is worth more than any single model in the system.</p></div>
+
+<h2 id="budget">Experiment budget: the mechanism that forces a decision</h2>
+<p>Each product is launched with a fixed budget to earn its verdict — €1,500 in the configuration — tracked as a hard counter in the gateway. Three consequences:</p>
+<div class="table-wrap"><table>
+<tr><th>State</th><th>Agent behaviour</th><th>Why it matters</th></tr>
+<tr><td>Budget remaining, exposure not met</td><td><code>CONTINUE_TEST</code>; the marketing agent may keep spending within the daily caps</td><td>Protects young products from being killed by noise</td></tr>
+<tr><td>Budget remaining, a defect found</td><td>Fix the site or reprice, then re-judge after the change has its own exposure</td><td>Stops "we killed it but the checkout was broken"</td></tr>
+<tr><td>Budget exhausted, no verdict reached</td><td><code>KILL</code> by default, held for a human</td><td>The expensive failure mode is indecision, not a wrong kill. A product that cannot prove itself for €1,500 does not get €4,000</td></tr>
+<tr><td>Budget exhausted on a winner</td><td>Product graduates: budget moves from the experiment pool to the operating pool</td><td>Makes "scaling" an explicit, funded decision rather than a drift</td></tr>
+</table></div>
+<p>The marketing agent enforces the same counter from the other side: once a product's experiment budget is spent, the gateway refuses any proposal that would raise its spend. Two agents, one number, enforced in one place.</p>
+
+<h2 id="runbook">The kill runbook</h2>
+<p>A kill is cheap to recommend and expensive to execute badly, so the agent produces the full sequence and a human signs it:</p>
+<div class="timeline">
+<div class="tl-item"><div class="tl-time">Immediately</div><h4>Stop the bleeding</h4><p>All acquisition spend on the product off in the same cycle (the marketing agent consumes <code>verdict.published</code>), retargeting and email flows off, experiment budget closed.</p></div>
+<div class="tl-item"><div class="tl-time">Same day</div><h4>Stop the capital</h4><p>Cancel open purchase orders not yet shipped; flag any in transit for the markdown plan rather than the shelf.</p></div>
+<div class="tl-item"><div class="tl-time">Days 1–60</div><h4>Convert stock to cash</h4><p>Three-step markdown curve sized to clear within 60 days, with the floor set by landed cost rather than by hope. The pricing rules already know the floor.</p></div>
+<div class="tl-item"><div class="tl-time">After clearance</div><h4>Close it down</h4><p>Storefront stays live while stock clears, then archived; the domain release is a separate human signal, because it is irreversible and outward-facing.</p></div>
+<div class="tl-item"><div class="tl-time">Permanent</div><h4>Keep the lesson</h4><p>The finding is written to portfolio memory as a prior for the next launch: category, price point, creative angle, refund reason, and which stage failed.</p></div>
+</div>
+
+<h2 id="memory">What compounds across ten launches</h2>
+<p>This is the part that makes the eleventh product cheaper to judge than the first.</p>
+<div class="table-wrap"><table>
+<tr><th>Memory</th><th>Written by</th><th>Used for</th></tr>
+<tr><td>Stage-rate priors by category and price band</td><td>Verdict agent, every week</td><td>Benchmarks stop being generic: a €24 candle is compared with past €20–30 impulse products, not with a €89 lamp</td></tr>
+<tr><td>Channel posteriors</td><td>Marketing agent, weekly</td><td>A new product's bandit starts from the two best past launches instead of from scratch, which is worth roughly two weeks of budget</td></tr>
+<tr><td>Refund reasons by supplier and material</td><td>Verdict and care agents</td><td>Kills a bad product earlier, and sometimes kills it before launch</td></tr>
+<tr><td>Elasticity by category</td><td>Demand engine</td><td>Makes the first reprice test informed rather than a guess</td></tr>
+<tr><td>Lead-time distributions by supplier</td><td>Reorder agent, on every receipt</td><td>Safety stock reflects the supplier's actual behaviour, not their promise</td></tr>
+</table></div>
+
+<h2 id="harness">Harness and policy</h2>
+<pre>agent: product_verdict
+version: 3
+model:
+  plan: claude-sonnet-5-5
+  max_steps: 40
+  token_budget_month: 400_000
+
+reads: [funnel_rates, ad_metrics_panel, margin_table, stock_cover,
+        experiment_budget, returns_by_variant, portfolio_memory]
+
+writes: [publish_verdict, raise_anomaly]
+
+policy:
+  min_sessions: 1_500             # exposure gate: below this there is no verdict
+  min_spend_eur: 400
+  payback_factor: 1.2
+  experiment_budget_eur: 1_500
+  window_days: 14
+  kill_requires_human: true       # hard-coded T3 regardless of value
+
+verify:
+  - exposure_met_or_verdict_is_CONTINUE_TEST
+  - no_kill_while_any_variant_out_of_stock
+  - every_rate_cited_has_evidence_id
+  - verdict_in_enum</pre>
+<p>The benchmark bands live in <code>engines/funnel.py</code> and are per category, which is the only part a merchandiser should ever need to tune. Everything else is the same code for every product and every vertical.</p>
+
+<h2 id="fail">Failure modes, and what catches each</h2>
+<div class="table-wrap"><table>
+<tr><th>Failure</th><th>How it would happen</th><th>Control</th></tr>
+<tr><td>Killing a good product that was out of stock</td><td>Sales collapse looks like demand collapse</td><td>Kill suppressed outright when any variant has under 7 days of cover; the reorder action is inserted at the top of the list instead</td></tr>
+<tr><td>Killing a good product with a broken checkout</td><td>Site defect read as product failure</td><td>The discriminator: a healthy add-to-cart rate with a collapsed checkout can never produce a kill</td></tr>
+<tr><td>Keeping a bad product forever</td><td>Each week looks "nearly there"</td><td>Experiment budget as a hard counter, with kill as the default when it is exhausted</td></tr>
+<tr><td>Verdict on noise</td><td>A week with 200 sessions</td><td>Minimum exposure gate in the engine and re-checked in the gateway; the verdict is literally "not yet known"</td></tr>
+<tr><td>Seasonality mistaken for decline</td><td>A product judged across a seasonal break</td><td>14-day window compared against the category's own seasonal index from memory; a flagged anomaly day is excluded</td></tr>
+<tr><td>Verdict contradicts the other agents</td><td>Marketing scaling what the verdict agent is killing</td><td>One owner per write (R2) and the arbitration rule (R12); <code>verdict.published</code> is consumed by marketing in the same cycle</td></tr>
+<tr><td>A confident wrong verdict</td><td>Model narrates beyond the evidence</td><td>The verdict is produced by deterministic rules; the model only writes the sentence, and a sentence containing an uncited number is refused</td></tr>
+</table></div>
+
+<div class="callout info"><span class="t">What a human gets each Monday</span>
+<p>One page: ten products, each with a verdict, a confidence, the stage that failed, the ranked fixes, the remaining experiment budget, and — for the kills — the runbook with a single approval. The decisions a human must make shrink to the irreversible ones, which at ten products is a short meeting rather than a week of spreadsheet archaeology.</p></div>
+
+</div></main>
+</body>
+</html>

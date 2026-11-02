@@ -1,0 +1,17 @@
+{
+  "_comment": "Portfolio-level envelope. Owned by finance, enforced in the gateway, not by any agent.",
+  "cash_on_hand_eur": 48000,
+  "weekly_burn_eur": 3200,
+  "cash_runway_floor_weeks": 12,
+  "cover_cap_weeks": 16,
+  "qty_band_vs_12w_sales": [0.3, 4.0],
+  "portfolio_daily_cap_eur": 3000,
+  "min_cover_days_for_acquisition": 14,
+  "max_change_pct_per_cell_per_day": 20,
+  "cooldown_hours_per_cell": 48,
+  "max_pauses_per_product_per_day": 3,
+  "autonomy": {
+    "auto_execute_below_eur": 2000,
+    "human_signal_above_eur": 10000
+  }
+}

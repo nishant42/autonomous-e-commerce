@@ -1,0 +1,7 @@
+
+engine.db
+engine.db-wal
+engine.db-shm
+__pycache__/
+models/
+.env

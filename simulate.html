@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Halden Live Operations</title>
+<meta name="description" content="Animated simulation of the autonomous company operating by itself.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js"></script>
+<style>
+  .sim { max-width: 1480px; margin: 0 auto; padding: 18px 20px 60px; display: grid; gap: 14px; }
+  .sim-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+  .sim-head h1 { font-size: 26px; margin: 0; }
+  .sim-head .sub { color: var(--fg-muted); font-size: 13.5px; margin: 2px 0 0; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+  .seg { display: flex; gap: 3px; padding: 3px; border-radius: 11px; background: var(--bg-sunk); border: 1px solid var(--border); flex-wrap: wrap; }
+  .seg button { height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--fg-muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--bg-elev); color: var(--fg); box-shadow: var(--shadow); }
+  .play { height: 40px; padding: 0 18px; border-radius: 11px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 600; font-size: 14.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: transform .15s, box-shadow .15s; }
+  .play:hover { transform: translateY(-1px); box-shadow: var(--shadow-lift); }
+  .play svg { width: 15px; height: 15px; }
+  .kill { height: 40px; padding: 0 14px; border-radius: 11px; border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--bg-elev); color: var(--danger); font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; }
+  .kill[aria-pressed="true"] { background: var(--danger); color: var(--bg-elev); border-color: var(--danger); }
+
+  .narr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 18px; border-radius: 14px; background: var(--bg-elev); border: 1px solid var(--border); box-shadow: var(--shadow); }
+  .narr .clock { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: center; min-width: 118px; }
+  .narr .clock .d { font-size: 11px; color: var(--fg-faint);  }
+  .narr .clock .t { font-family: var(--display); font-size: 26px; font-weight: 650; letter-spacing: -.02em; color: var(--fg); }
+  .narr .text { font-size: 15.5px; line-height: 1.5; min-width: 0; }
+  .narr .text b { color: var(--accent); }
+  .narr .text .who { display: block; font-family: var(--mono); font-size: 11px;  color: var(--flax); margin-bottom: 2px; }
+  .narr .prog { font-family: var(--mono); font-size: 12px; color: var(--fg-faint); text-align: right; white-space: nowrap; }
+  .narr .bar { height: 4px; width: 120px; background: var(--bg-sunk); border-radius: 99px; margin-top: 6px; overflow: hidden; }
+  .narr .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  .narr.alert { border-color: var(--danger); background: color-mix(in srgb, var(--danger-soft) 60%, var(--bg-elev)); }
+
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+  .stage { position: relative; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); }
+  .stage svg { display: block; width: 100%; height: auto; }
+  .lane { fill: var(--bg-sunk); opacity: .6; }
+  .lane-t { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; fill: var(--fg-faint);  }
+  .wire { stroke: var(--border); stroke-width: 1.2; fill: none; }
+  .sn rect.b { fill: var(--bg-elev); stroke: var(--border-strong); stroke-width: 1.3; transition: stroke .2s, fill .2s; }
+  .sn .k { fill: var(--kc); }
+  .sn text.l { font-family: var(--display); font-weight: 650; font-size: 12.5px; fill: var(--fg); }
+  .sn text.s { font-family: var(--mono); font-size: 9.5px; fill: var(--fg-faint); letter-spacing: .04em; }
+  .sn { cursor: pointer; }
+  .sn .glow { fill: none; stroke: var(--kc); stroke-width: 6; opacity: 0; }
+  .sn.active .glow { animation: glow 1.1s ease-out; }
+  @keyframes glow { 0% { opacity: .55; } 100% { opacity: 0; } }
+  .sn.busy rect.b { stroke: var(--kc); stroke-width: 2; }
+  .sn.quar rect.b { fill: var(--danger-soft); stroke: var(--danger); stroke-width: 2; }
+  .sn.quar text.s { fill: var(--danger); font-weight: 600; }
+  .sn.shadow rect.b { stroke-dasharray: 5 4; stroke: var(--warn); }
+  .sn.halt rect.b { stroke: var(--danger); stroke-dasharray: 3 3; }
+  .pk { pointer-events: none; }
+  .pk text { font-family: var(--mono); font-size: 10.5px; font-weight: 600; paint-order: stroke; stroke: var(--bg-elev); stroke-width: 4px; stroke-linejoin: round; }
+  .trail { fill: none; stroke-width: 2; stroke-linecap: round; opacity: .5; }
+  .legend { position: absolute; left: 12px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--fg-muted); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  .info { position: absolute; right: 12px; bottom: 12px; width: 280px; max-width: calc(100% - 24px); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow-lift); font-size: 13px; }
+  .info h4 { margin: 0 0 4px; font-family: var(--display); font-size: 15px; }
+  .info p { margin: 0 0 8px; color: var(--fg-muted); }
+  .info button { all: unset; cursor: pointer; position: absolute; right: 10px; top: 8px; color: var(--fg-faint); }
+
+  .side { display: grid; gap: 14px; min-width: 0; }
+  .panel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
+  .panel h3 { margin: 0 0 10px; font-size: 13px; font-family: var(--mono); font-weight: 600;  color: var(--fg-faint); display: flex; justify-content: space-between; }
+  .kgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+  .k .v { font-family: var(--display); font-size: 22px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; transition: color .3s; }
+  .k .l { font-size: 11.5px; color: var(--fg-faint); }
+  .k .v.flash { color: var(--accent); }
+  .hero-sku { display: grid; gap: 6px; }
+  .hero-sku .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--fg-muted); }
+  .hero-sku .name { font-weight: 600; color: var(--fg); font-size: 13.5px; }
+  .pill { font-family: var(--mono); font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--ok-soft); color: var(--ok); }
+  .pill.tight { background: var(--warn-soft); color: var(--warn); }
+  .pill.crit { background: var(--danger-soft); color: var(--danger); }
+  .cover { height: 8px; border-radius: 99px; background: var(--bg-sunk); overflow: hidden; }
+  .cover i { display: block; height: 100%; width: 50%; background: var(--ok); transition: width .6s, background .3s; border-radius: 99px; }
+  canvas#chart { width: 100%; height: 150px; display: block; }
+  .tiers { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .tiers div { text-align: center; padding: 8px 4px; border-radius: 10px; background: var(--bg-sunk); }
+  .tiers b { display: block; font-family: var(--display); font-size: 19px; font-variant-numeric: tabular-nums; }
+  .tiers span { font-family: var(--mono); font-size: 10.5px; font-weight: 600; }
+  .tiers .t0 span, .tiers .t1 span { color: var(--ok); }
+  .tiers .t2 span { color: var(--warn); }
+  .tiers .t3 span, .tiers .rj span { color: var(--danger); }
+
+  .log { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .log-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; color: var(--fg-faint); }
+  .log-head b { color: var(--fg); font-weight: 600; }
+  .log ul { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; }
+  .log li { display: grid; grid-template-columns: 96px 170px minmax(0, 1fr) 64px; gap: 12px; padding: 7px 16px; border-bottom: 1px dashed var(--border); font-size: 13px; align-items: center; }
+  .log li.new { animation: rowIn .5s ease-out; }
+  @keyframes rowIn { from { background: var(--accent-soft); } to { background: transparent; } }
+  .log .t { font-family: var(--mono); font-size: 11.5px; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+  .log .a { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log .m { color: var(--fg-muted); min-width: 0; }
+  .tier { justify-self: end; font-family: var(--mono); font-size: 10.5px; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+  .tier.T0, .tier.T1, .tier.OK { background: var(--ok-soft); color: var(--ok); }
+  .tier.T2 { background: var(--warn-soft); color: var(--warn); }
+  .tier.T3, .tier.REJ, .tier.HALT { background: var(--danger-soft); color: var(--danger); }
+  .empty-log { padding: 16px; color: var(--fg-faint); font-size: 13.5px; }
+
+  @media (max-width: 1100px) { .main { grid-template-columns: minmax(0, 1fr); } .side { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 720px) {
+    .sim { padding: 14px 16px 50px; }
+    .side { grid-template-columns: minmax(0, 1fr); }
+    .narr { grid-template-columns: minmax(0, 1fr); }
+    .narr .clock { text-align: left; }
+    .narr .prog { text-align: left; }
+    .log li { grid-template-columns: 70px minmax(0, 1fr) 54px; }
+    .log .a { display: none; }
+    .controls { margin-left: 0; }
+  }
+</style>
+</head>
+<body data-app>
+<main>
+<div class="sim">
+  <div class="sim-head">
+    <div>
+      <h1>Live operations</h1>
+      <p class="sub">Pick a scenario and press Start. Every packet is a real event, tool call or action from the architecture.</p>
+    </div>
+    <div class="controls">
+      <div class="seg" id="scen" role="group" aria-label="Scenario"></div>
+      <div class="seg" id="speed" role="group" aria-label="Speed">
+        <button type="button" data-s="0.6">0.5×</button><button type="button" data-s="1" aria-pressed="true">1×</button><button type="button" data-s="2">2×</button><button type="button" data-s="4">4×</button>
+      </div>
+      <button class="play" id="play" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg><span>Start</span></button>
+      <button class="icon-btn" id="step" type="button" title="Run the next step only">Next step ⏭</button>
+      <button class="icon-btn" id="reset" type="button">Reset</button>
+      <button class="kill" id="kill" type="button" aria-pressed="false">Kill switch</button>
+    </div>
+  </div>
+
+  <div class="narr" id="narr">
+    <div class="clock"><div class="d" id="c-day">Day 1 · Tue</div><div class="t" id="c-time">09:00</div></div>
+    <div class="text" id="n-text"><span class="who">Ready</span>Press <b>Start</b> to watch the company run itself, or <b>Next step</b> to walk through it at your own pace.</div>
+    <div class="prog"><span id="n-prog">0 / 0</span><div class="bar"><i id="n-bar"></i></div></div>
+  </div>
+
+  <div class="main">
+    <div class="stage">
+      <svg id="st" viewBox="0 0 1090 610" role="img" aria-label="Animated network of agents and systems"></svg>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>event</span>
+        <span><i style="background:var(--flax)"></i>action proposal</span>
+        <span><i style="background:var(--llm)"></i>LLM message</span>
+        <span><i style="background:var(--ok)"></i>approved / executed</span>
+        <span><i style="background:var(--danger)"></i>rejected / halted</span>
+      </div>
+      <div class="info" id="info" hidden></div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <h3>Company <span id="k-live">paused</span></h3>
+        <div class="kgrid">
+          <div class="k"><div class="v" id="k-orders">0</div><div class="l">orders today</div></div>
+          <div class="k"><div class="v" id="k-rev">€0</div><div class="l">revenue today</div></div>
+          <div class="k"><div class="v" id="k-cash">€412k</div><div class="l">cash · runway <span id="k-run">19.0</span> wks</div></div>
+          <div class="k"><div class="v" id="k-ads">€1,850</div><div class="l">ad spend / day</div></div>
+          <div class="k"><div class="v" id="k-po">3</div><div class="l">open purchase orders</div></div>
+          <div class="k"><div class="v" id="k-human">0</div><div class="l">human touches</div></div>
+        </div>
+      </div>
+      <div class="panel hero-sku">
+        <h3>Watched SKU <span class="pill" id="k-band">healthy</span></h3>
+        <div class="row"><span class="name">Étoile bath towel · white</span><span id="k-price">€71.10 <s class="muted">€79</s></span></div>
+        <div class="row"><span>ATP <b id="k-atp">42</b> · on order <b id="k-onord">60</b></span><span>cover <b id="k-cover">14.0</b> days</span></div>
+        <div class="cover"><i id="k-coverbar"></i></div>
+        <canvas id="chart" aria-label="Chart of the watched metric over simulated time"></canvas>
+        <div class="row"><span id="chart-l">ATP units over time</span><span class="muted">illustrative SKU</span></div>
+      </div>
+      <div class="panel">
+        <h3>Actions by tier</h3>
+        <div class="tiers">
+          <div class="t0"><b id="t-T0">0</b><span>T0</span></div>
+          <div class="t1"><b id="t-T1">0</b><span>T1</span></div>
+          <div class="t2"><b id="t-T2">0</b><span>T2</span></div>
+          <div class="t3"><b id="t-T3">0</b><span>T3</span></div>
+          <div class="rj"><b id="t-REJ">0</b><span>vetoed</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="log">
+    <div class="log-head"><b>Ops Ledger · action log</b><span>newest first</span><span style="margin-left:auto" id="log-n">0 entries</span></div>
+    <ul id="log"><li class="empty-log">The log fills as agents act. Every line is an audited proposal, decision or event.</li></ul>
+  </div>
+</div>
+</main>
+<script src="assets/sim.js"></script>
+</body>
+</html>

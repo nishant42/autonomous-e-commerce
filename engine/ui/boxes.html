@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the system works</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f8cff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/ui/style.css">
+<style>
+  body { display: block; height: auto; overflow: auto; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 18px 24px 70px; }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 12px 24px;
+         background: var(--bg-1); border-bottom: 1px solid var(--line);
+         position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+  h1 { font-size: 22px; margin: 22px 0 6px; letter-spacing: -.02em; }
+  .sub { color: var(--fg-2); font-size: 14px; margin: 0 0 22px; max-width: 78ch; }
+  .layer { margin-bottom: 10px; }
+  .layer > .cap { font: 600 10.5px var(--sans); letter-spacing: .1em; text-transform: uppercase;
+                  color: var(--fg-3); margin-bottom: 7px; }
+  .box { border: 1px solid var(--line); border-radius: 11px; background: var(--bg-1);
+         padding: 15px 18px; transition: border-color .2s, box-shadow .2s; }
+  .box.live { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,140,255,.12); }
+  .box .h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .box .h .t { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+  .box .h .j { font-size: 13px; color: var(--fg-3); }
+  .box .says { font-size: 14.5px; line-height: 1.55; margin: 10px 0 0; color: var(--fg); }
+  .box .facts { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 11px; }
+  .box .facts div { font: 11.5px var(--mono); color: var(--fg-3); }
+  .box .facts b { color: var(--fg); font-size: 13px; }
+  .agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .flowdown { text-align: center; color: var(--fg-3); font-size: 11.5px; padding: 7px 0; }
+  .flowdown span { border: 1px solid var(--line); border-radius: 20px; padding: 3px 12px; background: var(--bg); }
+  .chip2 { font: 600 10px var(--sans); letter-spacing: .07em; text-transform: uppercase;
+           padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--fg-3); }
+  .chip2.ml { color: var(--ok); border-color: #1d3a24; background: #0f1a12; }
+  .chip2.ai { color: #c084fc; border-color: #3b2a55; background: #160f24; }
+  .chip2.math { color: #4fd1c5; border-color: #10403c; background: #08201e; }
+  .chip2.rules { color: var(--warn); border-color: #3a2f12; background: #1a150a; }
+  .gate { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+  .gate .g { text-align: center; }
+  .gate .g .v { font: 700 30px var(--mono); letter-spacing: -.03em; }
+  .gate .g .l { font-size: 11.5px; color: var(--fg-3); margin-top: 3px; }
+  .gate .g.ok .v { color: var(--ok); } .gate .g.warn .v { color: var(--warn); }
+  .gate .g.bad .v { color: var(--bad); }
+  details.why { margin-top: 10px; }
+  details.why summary { cursor: pointer; font-size: 12.5px; color: var(--accent); }
+  details.why .b { font-size: 13px; color: var(--fg-2); line-height: 1.6; margin-top: 8px;
+                   border-left: 2px solid var(--line-2); padding-left: 12px; }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="brand">Halden <small>How the system works</small></div>
+  <span class="spacer" style="flex:1"></span>
+  <span class="pill" id="provider">model…</span>
+  <span class="pill" id="busy">idle</span>
+  <button class="primary" id="b-run">Run everything now</button>
+  <a class="btn" href="/flow" style="text-decoration:none;padding:7px 12px">Step through a decision</a>
+  <a class="btn" href="/console" style="text-decoration:none;padding:7px 12px">Advanced</a>
+</div>
+
+<div class="page" id="page"><p class="muted">loading…</p></div>
+
+<script>
+(function () {
+  "use strict";
+  var el = function (i) { return document.getElementById(i); };
+  var esc = function (s) { return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+  var n = function (v) { return (+v || 0).toLocaleString("en-GB"); };
+
+  function api(p, b) {
+    return fetch(p, b ? { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(b) } : undefined).then(function (r) { return r.json(); });
+  }
+
+  function box(opts) {
+    return "<div class='box " + (opts.live ? "live" : "") + "'><div class='h'>" +
+      "<span class='t'>" + esc(opts.title) + "</span>" +
+      (opts.job ? "<span class='j'>" + esc(opts.job) + "</span>" : "") +
+      (opts.chips || "") + "</div>" +
+      (opts.says ? "<p class='says'>" + opts.says + "</p>" : "") +
+      (opts.facts ? "<div class='facts'>" + opts.facts + "</div>" : "") +
+      (opts.why ? "<details class='why'><summary>what this layer is</summary><div class='b'>" +
+        opts.why + "</div></details>" : "") + "</div>";
+  }
+
+  function fact(label, value) { return "<div>" + esc(label) + " <b>" + value + "</b></div>"; }
+
+  function render(d) {
+    var busy = d.busy && d.busy.running;
+    el("busy").textContent = busy ? "running " + d.busy.what + "…" : "idle";
+    el("busy").className = "pill" + (busy ? " live" : "");
+    el("provider").innerHTML = "thinking <b>" +
+      esc(d.provider.provider === "claude_cli" ? "Claude" :
+          d.provider.provider === "anthropic_api" ? "Claude API" : "rules only") + "</b>";
+
+    var h = "<h1>One shop, three agents, one gate.</h1>" +
+      "<p class='sub'>Everything below is live. Press <b>Run everything now</b> and the boxes " +
+      "change, because the agents really run &mdash; nothing on this page is a drawing.</p>";
+
+    h += "<div class='layer'><div class='cap'>1 &middot; Where the facts come from</div>" +
+      box({
+        title: "The shop", job: d.shop.connected ? d.shop.name + ", open source, on this machine"
+          : "no storefront connected",
+        live: busy,
+        says: d.shop.connected
+          ? "Selling <b>" + n(d.shop.variants) + "</b> product variants right now, of which <b>" +
+            n(d.shop.out_of_stock) + "</b> cannot be bought because they are out of stock."
+          : "Running on stored history. Connect Medusa or Shopify and the same agents read that instead.",
+        facts: fact("variants", n(d.shop.variants)) + fact("unbuyable now", n(d.shop.out_of_stock)) +
+               fact("orders imported", n(d.shop.orders)) +
+               fact("last stock reading", esc((d.shop.last_sync || "never").replace("T", " "))),
+        why: "We did not build the shop and we do not want to. It is Medusa, free and open " +
+             "source. A small adapter reads its products, orders and stock. There is a second " +
+             "adapter for Shopify that writes into the same tables, so the shop can be swapped " +
+             "without the agents noticing."
+      }) + "</div>";
+
+    h += "<div class='flowdown'><span>read every few minutes, and written down permanently</span></div>";
+
+    h += "<div class='layer'><div class='cap'>2 &middot; What the system remembers</div>" +
+      box({
+        title: "Memory", job: "the part that makes the rest possible",
+        says: "<b>" + n(d.memory.snapshots) + "</b> readings of what was in stock and when. " +
+              "This is the one thing that cannot be recovered later, and it is why the system " +
+              "can tell <i>did not sell</i> apart from <i>could not be bought</i>.",
+        facts: fact("stock readings", n(d.memory.snapshots)) + fact("sales lines", n(d.memory.sales)) +
+               fact("ad days", n(d.memory.ad_days)) + fact("stored query results", n(d.memory.evidence)),
+        why: "Every number an agent uses is saved at the moment it was used, so any decision can " +
+             "be re-examined months later against exactly the data that produced it."
+      }) + "</div>";
+
+    h += "<div class='flowdown'><span>work is handed to the agents on a durable queue &mdash; " +
+      n(d.bus.done) + " jobs done, " + n(d.bus.dead) + " failed</span></div>";
+
+    h += "<div class='layer'><div class='cap'>3 &middot; The three agents, and what each just did</div>" +
+      "<div class='agents'>";
+    d.agents.forEach(function (a) {
+      var chips = "<span class='chip2 " + (a.kinds.model ? "ml" : "math") + "'>" +
+        esc(a.engine) + "</span>";
+      if (a.judgments) chips += " <span class='chip2 ai'>Claude: " + a.judgments + " judgment" +
+        (a.judgments === 1 ? "" : "s") + "</span>";
+      var jd = (a.judgment_detail || []).map(function (j) {
+        return "<div style='margin-top:8px'><b>Asked Claude:</b> " + esc(j.q) +
+          "<br><b>Answer:</b> " + esc(j.a) + " <span class='muted'>(" + esc(j.source) + ")</span></div>";
+      }).join("");
+      h += box({
+        title: a.title, job: a.job, live: busy, chips: chips,
+        says: esc(a.headline),
+        facts: fact("steps it took", n(a.steps)) +
+               fact("facts it read", n(a.kinds.read || 0)) +
+               fact("rules it applied", n((a.kinds.rule || 0) + (a.kinds.engine || 0))) +
+               fact("actions proposed", n(a.kinds.gateway || 0)),
+        why: "It cannot act by itself. It reads, it computes, and then it <i>proposes</i>. " +
+             "Everything it proposes goes through the gate below." + jd
+      });
+    });
+    h += "</div></div>";
+
+    if (d.model) {
+      h += "<div class='layer'><div class='cap'>4 &middot; The model behind the marketing agent</div>" +
+        box({
+          title: "Trained model", job: esc(d.model.family),
+          says: "Six kinds of model competed. This one won on data it had never seen, scoring <b>" +
+            ((d.model.out_sample || {}).r2 || 0).toFixed(2) +
+            "</b> where 1.0 would be perfect and 0 would be no better than guessing the average.",
+          facts: fact("trained", esc((d.model.trained_at || "").slice(0, 16).replace("T", " "))),
+          why: "It is retrained on a schedule and only used if it beats the simple benchmark of " +
+               "\\u201cthe same as last week\\u201d. If it ever stops beating that, the agent falls " +
+               "back to plain rules and carries on."
+        }) + "</div>";
+    }
+
+    h += "<div class='flowdown'><span>every proposed action, from every agent, goes through here</span></div>";
+
+    h += "<div class='layer'><div class='cap'>5 &middot; The gate</div>" +
+      box({
+        title: "The gate", job: "nothing happens without passing it", live: busy,
+        says: "<div class='gate'>" +
+          "<div class='g ok'><div class='v'>" + n(d.gate.executed) + "</div><div class='l'>allowed automatically</div></div>" +
+          "<div class='g warn'><div class='v'>" + n(d.gate.waiting) + "</div><div class='l'>waiting for a person</div></div>" +
+          "<div class='g bad'><div class='v'>" + n(d.gate.refused) + "</div><div class='l'>refused outright</div></div>" +
+          "<div class='g'><div class='v'>\\u20ac" + n(d.gate.capital) + "</div><div class='l'>committed to stock</div></div>" +
+          "</div>",
+        why: "The gate holds the passwords to every outside system, so an agent physically cannot " +
+             "reach a supplier or an ad platform on its own. It checks the shape of the action, " +
+             "whether that agent is allowed to make it, whether the money is there, and how large " +
+             "it is. Small and reversible runs by itself. Larger gets a second opinion. Anything " +
+             "irreversible waits for you."
+      }) + "</div>";
+
+    h += "<div class='flowdown'><span>and everything, allowed or refused, is written down</span></div>";
+
+    h += "<div class='layer'><div class='cap'>6 &middot; The record</div>" +
+      box({
+        title: "The record", job: "every action ever attempted",
+        says: "<b>" + n(d.ledger.entries) + "</b> entries, including the refusals, each with the " +
+          "reason and the stored facts behind it. <b>" + n(d.ledger.anomalies) +
+          "</b> things the agents flagged as odd.",
+        why: "Nothing is ever deleted. Undoing a decision writes a new, opposite entry, so the " +
+             "history of what the business did and why stays intact."
+      }) + "</div>";
+
+    el("page").innerHTML = h;
+  }
+
+  function tick() { api("/api/boxes").then(render); }
+
+  document.addEventListener("click", function (e) {
+    if (e.target.id !== "b-run") return;
+    e.target.disabled = true;
+    api("/api/run", { what: "all" }).then(function () {
+      var tries = 0;
+      var poll = setInterval(function () {
+        tries += 1;
+        api("/api/boxes").then(function (d) {
+          render(d);
+          if ((!d.busy || !d.busy.running) || tries > 60) {
+            clearInterval(poll);
+            el("b-run").disabled = false;
+          }
+        });
+      }, 1000);
+    });
+  });
+
+  tick();
+  setInterval(tick, 5000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Architecture Canvas</title>
+<meta name="description" content="Interactive, draggable architecture diagrams for the autonomous commerce platform.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js"></script>
+<script src="assets/canvas-data.js"></script>
+<style>
+  html, body { height: 100%; }
+  .cv { display: grid; grid-template-rows: auto minmax(0, 1fr); height: calc(100vh - 58px); }
+  .cv-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg-elev); }
+  .tabs { display: flex; gap: 4px; background: var(--bg-sunk); padding: 3px; border-radius: 10px; border: 1px solid var(--border); flex-wrap: wrap; }
+  .tab { height: 30px; padding: 0 12px; border-radius: 8px; border: 0; background: transparent; color: var(--fg-muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--bg-elev); color: var(--fg); box-shadow: var(--shadow); }
+  .cv-bar .spacer { flex: 1; }
+  .icon-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .cv-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; min-height: 0; }
+  .stage { position: relative; min-width: 0; overflow: hidden;
+    background:
+      radial-gradient(circle, var(--border) 1px, transparent 1.2px) 0 0 / 22px 22px,
+      var(--bg);
+  }
+  svg#cv { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; cursor: grab; }
+  svg#cv.panning { cursor: grabbing; }
+  .hint { position: absolute; left: 14px; bottom: 12px; right: 14px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+  .hint span { font-size: 11.5px; color: var(--fg-muted); background: color-mix(in srgb, var(--bg-elev) 88%, transparent); border: 1px solid var(--border); border-radius: 7px; padding: 3px 8px; }
+  .hint kbd { font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg-elev); }
+  .legend { position: absolute; top: 12px; left: 14px; display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: var(--fg-muted); background: color-mix(in srgb, var(--bg-elev) 88%, transparent); border: 1px solid var(--border); border-radius: 9px; padding: 6px 10px; max-width: calc(100% - 28px); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+
+  /* nodes & edges */
+  .node { cursor: move; }
+  .node rect.box { fill: var(--bg-elev); stroke: var(--border-strong); stroke-width: 1.2; transition: stroke .15s; filter: drop-shadow(0 1px 1px rgba(0,0,0,.06)) drop-shadow(0 6px 14px rgba(20,26,46,.08)); }
+  .node:hover rect.box { stroke: var(--kc); }
+  .node.sel rect.box { stroke: var(--kc); stroke-width: 2.4; }
+  .node .kdot { fill: var(--kc); }
+  .node .kband { fill: var(--kc); opacity: .12; }
+  .node text.l { font-family: var(--display); font-weight: 650; font-size: 14px; fill: var(--fg); }
+  .node text.s { font-family: var(--font); font-size: 11.5px; fill: var(--fg-muted); }
+  .node.dim { opacity: .32; }
+  .edge path.line { fill: none; stroke: var(--fg-faint); stroke-width: 1.6; transition: stroke .15s, opacity .15s; }
+  .edge.dash path.line { stroke-dasharray: 6 5; }
+  .edge.ctrl path.line { stroke: var(--danger); stroke-dasharray: 2 5; opacity: .75; }
+  .edge path.hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
+  .edge text { font-family: var(--mono); font-size: 11px; fill: var(--fg-muted); paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round; pointer-events: none; }
+  .edge .handle { fill: var(--bg-elev); stroke: var(--accent); stroke-width: 1.6; cursor: grab; opacity: 0; transition: opacity .15s; }
+  .edge:hover .handle, .edge.sel .handle, .edge.hot .handle { opacity: 1; }
+  .edge.hot path.line, .edge.sel path.line { stroke: var(--accent); stroke-width: 2.4; }
+  .edge.dim { opacity: .18; }
+  .flowdot { fill: var(--accent); }
+  .flowdot.ctrl { fill: var(--danger); }
+  .tmp { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; fill: none; }
+  #arrow path { fill: var(--fg-faint); }
+  #arrow-hot path { fill: var(--accent); }
+  #arrow-ctrl path { fill: var(--danger); }
+  .rename { position: absolute; z-index: 5; font: 600 14px var(--display); padding: 4px 8px; border: 2px solid var(--accent); border-radius: 8px; background: var(--bg-elev); color: var(--fg); }
+
+  /* panel */
+  .panel { border-left: 1px solid var(--border); background: var(--bg-elev); overflow: auto; padding: 18px; min-width: 0; }
+  .panel .kicker { font-family: var(--mono); font-size: 11px;  color: var(--flax); }
+  .panel h2 { font-size: 21px; margin: 6px 0 4px; }
+  .panel .sub { color: var(--fg-muted); font-size: 13.5px; margin: 0 0 12px; }
+  .panel p { font-size: 14px; }
+  .kchip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: var(--bg-sunk); border: 1px solid var(--border); }
+  .kchip i { width: 8px; height: 8px; border-radius: 50%; background: var(--kc); display: inline-block; }
+  .conn { list-style: none; margin: 0 0 14px; padding: 0; font-size: 13px; }
+  .conn li { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+  .conn .dir { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); min-width: 30px; }
+  .conn button { all: unset; cursor: pointer; color: var(--accent); font-weight: 500; }
+  .conn .lbl { color: var(--fg-faint); font-family: var(--mono); font-size: 11px; margin-left: auto; text-align: right; }
+  .nodelist { display: flex; flex-wrap: wrap; gap: 6px; }
+  .nodelist button { font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--fg-muted); border-radius: 7px; padding: 3px 8px; cursor: pointer; }
+  .nodelist button:hover { border-color: var(--accent); color: var(--accent); }
+  .toast { position: absolute; right: 14px; top: 12px; background: var(--fg); color: var(--bg); font-size: 12.5px; padding: 6px 12px; border-radius: 8px; opacity: 0; transform: translateY(-4px); transition: opacity .2s, transform .2s; pointer-events: none; }
+  .toast.on { opacity: 1; transform: none; }
+
+  @media (max-width: 900px) {
+    .cv { height: auto; }
+    .cv-body { grid-template-columns: minmax(0, 1fr); }
+    .stage { height: 70vh; }
+    .panel { border-left: 0; border-top: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body data-app>
+<main>
+<div class="cv">
+  <div class="cv-bar">
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <span class="spacer"></span>
+    <button class="icon-btn" id="b-flow" type="button" aria-pressed="false">▶ Animate flow</button>
+    <button class="icon-btn" id="b-out" type="button" aria-label="Zoom out">−</button>
+    <button class="icon-btn" id="b-fit" type="button">Fit</button>
+    <button class="icon-btn" id="b-in" type="button" aria-label="Zoom in">+</button>
+    <button class="icon-btn" id="b-reset" type="button">Reset layout</button>
+    <button class="icon-btn" id="b-export" type="button">Export SVG</button>
+  </div>
+  <div class="cv-body">
+    <div class="stage" id="stage">
+      <svg id="cv" role="img" aria-label="Interactive architecture diagram">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+          <marker id="arrow-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+          <marker id="arrow-ctrl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+        </defs>
+        <g id="g-edges"></g><g id="g-dots"></g><g id="g-nodes"></g><path id="tmp" class="tmp" d=""/>
+      </svg>
+      <div class="legend" id="legend"></div>
+      <div class="hint">
+        <span>Drag a box to move it</span>
+        <span>Drag the ● on a line to bend it</span>
+        <span><kbd>Shift</kbd> + drag box → box to connect</span>
+        <span>Double-click a box to rename</span>
+        <span>Select a line, <kbd>Delete</kbd> to remove</span>
+        <span>Scroll to zoom · drag background to pan</span>
+      </div>
+      <div class="toast" id="toast"></div>
+    </div>
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </div>
+</div>
+</main>
+
+<script>
+(function () {
+  const V = window.CANVAS_VIEWS;
+  const W = 196, H = 60;
+  const KINDS = {
+    human: ["--flax", "Owner (human)"], control: ["--danger", "Control / safety"], external: ["--fg-faint", "External system"],
+    integration: ["--info", "Integration / routing"], bus: ["--info", "Event backbone"], runtime: ["--accent", "Runtime"],
+    agent: ["--llm", "LLM agent"], ml: ["--flax", "ML / optimisation"], gateway: ["--warn", "Action Gateway"],
+    data: ["--ok", "Data / state"], det: ["--fg-muted", "Deterministic"],
+  };
+  const svg = document.getElementById("cv"), gE = document.getElementById("g-edges"), gN = document.getElementById("g-nodes"), gD = document.getElementById("g-dots"), tmp = document.getElementById("tmp");
+  const panel = document.getElementById("panel"), stage = document.getElementById("stage");
+  const NS = "http://www.w3.org/2000/svg";
+  let viewKey = "platform", nodes = {}, edges = [], vb = { x: 0, y: 0, w: 1600, h: 800 };
+  let sel = null; // {type:'node'|'edge', id}
+  let flowOn = false;
+
+  const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+  const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
+  const toast = (msg) => { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 1500); };
+
+  // ---------- load / save ----------
+  function load(key) {
+    viewKey = V[key] ? key : "platform";
+    const v = V[viewKey], saved = store.get("canvas:" + viewKey) || {};
+    nodes = {};
+    v.nodes.forEach(([id, x, y, label, sub, kind, info, link]) => {
+      const s = (saved.nodes || {})[id];
+      nodes[id] = { id, x: s ? s[0] : x, y: s ? s[1] : y, label: (saved.labels || {})[id] || label, sub, kind, info, link };
+    });
+    edges = v.edges.map(([from, to, label, style], i) => {
+      const id = "e" + i + ":" + from + ">" + to;
+      const o = (saved.edges || {})[id];
+      return { id, from, to, label: label || "", style: style || "", ox: o ? o[0] : 0, oy: o ? o[1] : 0 };
+    }).filter((e) => !(saved.removed || []).includes(e.id));
+    (saved.extra || []).forEach((e) => { if (nodes[e.from] && nodes[e.to]) edges.push(Object.assign({ ox: 0, oy: 0, style: "", label: "" }, e)); });
+    sel = null;
+    document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.v === viewKey)));
+    if (location.hash !== "#" + viewKey) history.replaceState(null, "", "#" + viewKey);
+    buildNodes(); drawEdges(); fitView(); showPanel();
+  }
+  function save() {
+    const v = V[viewKey], base = new Set(v.edges.map(([f, t], i) => "e" + i + ":" + f + ">" + t));
+    const data = { nodes: {}, edges: {}, labels: {}, removed: [], extra: [] };
+    for (const id in nodes) { data.nodes[id] = [Math.round(nodes[id].x), Math.round(nodes[id].y)]; const orig = v.nodes.find((n) => n[0] === id); if (orig && orig[3] !== nodes[id].label) data.labels[id] = nodes[id].label; }
+    const present = new Set(edges.map((e) => e.id));
+    base.forEach((id) => { if (!present.has(id)) data.removed.push(id); });
+    edges.forEach((e) => { if (e.ox || e.oy) data.edges[e.id] = [Math.round(e.ox), Math.round(e.oy)]; if (!base.has(e.id)) data.extra.push({ id: e.id, from: e.from, to: e.to, label: e.label, style: e.style }); });
+    store.set("canvas:" + viewKey, data);
+  }
+
+  // ---------- geometry ----------
+  const nw = (n) => n.w || W;
+  const center = (n) => ({ x: n.x + nw(n) / 2, y: n.y + H / 2 });
+  function border(c, t, w) {
+    const dx = t.x - c.x, dy = t.y - c.y;
+    if (!dx && !dy) return c;
+    const s = Math.min(dx ? (w / 2 + 3) / Math.abs(dx) : Infinity, dy ? (H / 2 + 3) / Math.abs(dy) : Infinity);
+    return { x: c.x + dx * s, y: c.y + dy * s };
+  }
+  function geom(e) {
+    const a = center(nodes[e.from]), b = center(nodes[e.to]);
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const c = { x: mid.x + e.ox, y: mid.y + e.oy };
+    const s = border(a, c, nw(nodes[e.from])), t = border(b, c, nw(nodes[e.to]));
+    const h = { x: mid.x + e.ox / 2, y: mid.y + e.oy / 2 };
+    return { d: `M${s.x},${s.y} Q${c.x},${c.y} ${t.x},${t.y}`, h, mid };
+  }
+
+  // ---------- render ----------
+  function buildNodes() {
+    gN.innerHTML = "";
+    Object.values(nodes).forEach((n) => {
+      const g = mk("g", { class: "node", "data-id": n.id, tabindex: "0", role: "button", "aria-label": n.label }, gN);
+      g.style.setProperty("--kc", "var(" + (KINDS[n.kind] || KINDS.det)[0] + ")");
+      mk("rect", { class: "box", width: W, height: H, rx: 11 }, g);
+      mk("rect", { class: "kband", width: 6, height: H - 16, x: 0, y: 8, rx: 3 }, g);
+      mk("circle", { class: "kdot", cx: W - 14, cy: 14, r: 4 }, g);
+      const l = mk("text", { class: "l", x: 16, y: 26 }, g); l.textContent = n.label;
+      const s = mk("text", { class: "s", x: 16, y: 44 }, g); s.textContent = n.sub;
+      n.el = g; place(n); size(n);
+      g.addEventListener("keydown", (ev) => { if (ev.key === "Enter") select({ type: "node", id: n.id }); });
+    });
+  }
+  const place = (n) => n.el.setAttribute("transform", `translate(${n.x},${n.y})`);
+  function size(n) {
+    let w = W;
+    try { w = Math.max(170, Math.ceil(Math.max(n.el.querySelector("text.l").getComputedTextLength(), n.el.querySelector("text.s").getComputedTextLength())) + 44); } catch (e) {}
+    n.w = w;
+    n.el.querySelector("rect.box").setAttribute("width", w);
+    n.el.querySelector(".kdot").setAttribute("cx", w - 14);
+  }
+  function resizeAll() { Object.values(nodes).forEach(size); updateEdges(); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => resizeAll());
+  function drawEdges() {
+    gE.innerHTML = ""; gD.innerHTML = "";
+    edges.forEach((e) => {
+      if (!nodes[e.from] || !nodes[e.to]) return;
+      const g = mk("g", { class: "edge " + e.style, "data-id": e.id }, gE);
+      const { d, h } = geom(e);
+      e.hit = mk("path", { class: "hit", d }, g);
+      e.line = mk("path", { class: "line", d, "marker-end": "url(#" + (e.style === "ctrl" ? "arrow-ctrl" : "arrow") + ")" }, g);
+      e.txt = mk("text", { x: h.x, y: h.y - 9, "text-anchor": "middle" }, g); e.txt.textContent = e.label;
+      e.handle = mk("circle", { class: "handle", cx: h.x, cy: h.y, r: 6 }, g);
+      e.g = g;
+      e.dot = mk("circle", { class: "flowdot" + (e.style === "ctrl" ? " ctrl" : ""), r: 3.6, visibility: flowOn ? "visible" : "hidden" }, gD);
+      e.phase = Math.random();
+    });
+    paintSelection();
+  }
+  function updateEdges(ids) {
+    edges.forEach((e) => {
+      if (ids && !ids.has(e.from) && !ids.has(e.to) && !ids.has(e.id)) return;
+      if (!e.line) return;
+      const { d, h } = geom(e);
+      e.line.setAttribute("d", d); e.hit.setAttribute("d", d);
+      e.txt.setAttribute("x", h.x); e.txt.setAttribute("y", h.y - 9);
+      e.handle.setAttribute("cx", h.x); e.handle.setAttribute("cy", h.y);
+    });
+  }
+  function paintSelection() {
+    const nid = sel && sel.type === "node" ? sel.id : null, eid = sel && sel.type === "edge" ? sel.id : null;
+    const linked = new Set();
+    if (nid) edges.forEach((e) => { if (e.from === nid || e.to === nid) { linked.add(e.from); linked.add(e.to); } });
+    Object.values(nodes).forEach((n) => { n.el.classList.toggle("sel", n.id === nid); n.el.classList.toggle("dim", !!nid && !linked.has(n.id)); });
+    edges.forEach((e) => {
+      if (!e.g) return;
+      const hot = nid && (e.from === nid || e.to === nid);
+      e.g.classList.toggle("hot", !!hot); e.g.classList.toggle("sel", e.id === eid); e.g.classList.toggle("dim", !!nid && !hot);
+      e.line.setAttribute("marker-end", "url(#" + (hot || e.id === eid ? "arrow-hot" : e.style === "ctrl" ? "arrow-ctrl" : "arrow") + ")");
+    });
+  }
+
+  // ---------- panel ----------
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function showPanel() {
+    const v = V[viewKey];
+    if (!sel) {
+      panel.innerHTML = '<div class="kicker">View</div><h2>' + esc(v.title) + '</h2><p class="sub">' + esc(v.blurb) + "</p>" +
+        "<p>Click any box to see what it does and how it connects. Your layout is saved in this browser.</p>" +
+        '<h4>Components</h4><div class="nodelist">' + Object.values(nodes).map((n) => '<button type="button" data-go="' + n.id + '">' + esc(n.label) + "</button>").join("") + "</div>";
+    } else if (sel.type === "node") {
+      const n = nodes[sel.id], k = KINDS[n.kind] || KINDS.det;
+      const out = edges.filter((e) => e.from === n.id), inn = edges.filter((e) => e.to === n.id);
+      const row = (dir, e, other) => '<li><span class="dir">' + dir + '</span><button type="button" data-go="' + other + '">' + esc(nodes[other].label) + '</button><span class="lbl">' + esc(e.label) + "</span></li>";
+      panel.innerHTML = '<span class="kchip" style="--kc:var(' + k[0] + ')"><i></i>' + k[1] + "</span><h2>" + esc(n.label) + '</h2><p class="sub">' + esc(n.sub) + "</p><p>" + esc(n.info) + "</p>" +
+        (inn.length ? "<h4>Receives from</h4><ul class=\"conn\">" + inn.map((e) => row("in", e, e.from)).join("") + "</ul>" : "") +
+        (out.length ? "<h4>Sends to</h4><ul class=\"conn\">" + out.map((e) => row("out", e, e.to)).join("") + "</ul>" : "") +
+        (n.link ? '<a class="icon-btn" href="' + n.link + '">Read the design →</a>' : "");
+    } else {
+      const e = edges.find((x) => x.id === sel.id);
+      if (!e) { sel = null; return showPanel(); }
+      panel.innerHTML = '<div class="kicker">Connection</div><h2>' + esc(nodes[e.from].label) + " → " + esc(nodes[e.to].label) + '</h2><p class="sub">' + esc(e.label || "unlabelled") + "</p>" +
+        "<p>Drag the ● handle to bend this line. Press <kbd>Delete</kbd> to remove it.</p>" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="icon-btn" type="button" id="b-straight">Straighten</button><button class="icon-btn" type="button" id="b-del">Delete line</button></div>';
+      document.getElementById("b-straight").onclick = () => { e.ox = e.oy = 0; updateEdges(new Set([e.id])); save(); };
+      document.getElementById("b-del").onclick = () => removeEdge(e.id);
+    }
+  }
+  panel.addEventListener("click", (ev) => { const b = ev.target.closest("[data-go]"); if (b) { select({ type: "node", id: b.dataset.go }); centerOn(nodes[b.dataset.go]); } });
+  function select(s) { sel = s; paintSelection(); showPanel(); }
+  function removeEdge(id) { edges = edges.filter((e) => e.id !== id); sel = null; drawEdges(); save(); showPanel(); toast("Line removed"); }
+
+  // ---------- view box ----------
+  const applyVB = () => svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  function fitView() {
+    const ns = Object.values(nodes);
+    let x0 = Math.min(...ns.map((n) => n.x)) - 60, y0 = Math.min(...ns.map((n) => n.y)) - 70;
+    let x1 = Math.max(...ns.map((n) => n.x + nw(n))) + 60, y1 = Math.max(...ns.map((n) => n.y + H)) + 70;
+    const r = stage.getBoundingClientRect(), ar = r.width / Math.max(r.height, 1);
+    let w = x1 - x0, h = y1 - y0;
+    if (w / h < ar) { const nw = h * ar; x0 -= (nw - w) / 2; w = nw; } else { const nh = w / ar; y0 -= (nh - h) / 2; h = nh; }
+    vb = { x: x0, y: y0, w, h }; applyVB();
+  }
+  function zoom(f, px, py) {
+    const nw = Math.min(6000, Math.max(300, vb.w * f)), k = nw / vb.w;
+    if (px === undefined) { px = vb.x + vb.w / 2; py = vb.y + vb.h / 2; }
+    vb = { x: px - (px - vb.x) * k, y: py - (py - vb.y) * k, w: vb.w * k, h: vb.h * k }; applyVB();
+  }
+  function centerOn(n) { const c = center(n); vb.x = c.x - vb.w / 2; vb.y = c.y - vb.h / 2; applyVB(); }
+  function pt(ev) { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
+
+  // ---------- interaction ----------
+  let drag = null;
+  svg.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    const p = pt(ev), nEl = ev.target.closest(".node"), hEl = ev.target.closest(".handle"), eEl = ev.target.closest(".edge");
+    svg.setPointerCapture(ev.pointerId);
+    if (hEl) { const e = edges.find((x) => x.id === eEl.dataset.id); drag = { type: "bend", e }; select({ type: "edge", id: e.id }); }
+    else if (nEl) {
+      const n = nodes[nEl.dataset.id];
+      if (ev.shiftKey) drag = { type: "link", from: n };
+      else { drag = { type: "node", n, dx: p.x - n.x, dy: p.y - n.y, moved: false }; gN.appendChild(n.el); }
+      select({ type: "node", id: n.id });
+    } else if (eEl) { select({ type: "edge", id: eEl.dataset.id }); }
+    else { drag = { type: "pan", sx: ev.clientX, sy: ev.clientY, vx: vb.x, vy: vb.y, moved: false }; svg.classList.add("panning"); }
+  });
+  svg.addEventListener("pointermove", (ev) => {
+    if (!drag) return;
+    const p = pt(ev);
+    if (drag.type === "node") {
+      drag.n.x = Math.round((p.x - drag.dx) / 2) * 2; drag.n.y = Math.round((p.y - drag.dy) / 2) * 2; drag.moved = true;
+      place(drag.n); updateEdges(new Set([drag.n.id]));
+    } else if (drag.type === "bend") {
+      const { mid } = geom(drag.e);
+      drag.e.ox = 2 * (p.x - mid.x); drag.e.oy = 2 * (p.y - mid.y); updateEdges(new Set([drag.e.id]));
+    } else if (drag.type === "link") {
+      const c = center(drag.from); tmp.setAttribute("d", `M${c.x},${c.y} L${p.x},${p.y}`);
+    } else if (drag.type === "pan") {
+      const r = svg.getBoundingClientRect(), k = vb.w / r.width;
+      vb.x = drag.vx - (ev.clientX - drag.sx) * k; vb.y = drag.vy - (ev.clientY - drag.sy) * k; drag.moved = true; applyVB();
+    }
+  });
+  svg.addEventListener("pointerup", (ev) => {
+    if (!drag) return;
+    if (drag.type === "node" && drag.moved) save();
+    if (drag.type === "bend") save();
+    if (drag.type === "link") {
+      tmp.setAttribute("d", "");
+      const target = document.elementFromPoint(ev.clientX, ev.clientY);
+      const tEl = target && target.closest(".node");
+      if (tEl && tEl.dataset.id !== drag.from.id) {
+        const id = "u" + Date.now() + ":" + drag.from.id + ">" + tEl.dataset.id;
+        edges.push({ id, from: drag.from.id, to: tEl.dataset.id, label: "", style: "", ox: 0, oy: 0 });
+        drawEdges(); save(); select({ type: "edge", id }); toast("Connection added");
+      }
+    }
+    if (drag.type === "pan" && !drag.moved) select(null);
+    svg.classList.remove("panning");
+    drag = null;
+  });
+  svg.addEventListener("wheel", (ev) => { ev.preventDefault(); const p = pt(ev); zoom(ev.deltaY > 0 ? 1.1 : 1 / 1.1, p.x, p.y); }, { passive: false });
+  svg.addEventListener("dblclick", (ev) => {
+    const nEl = ev.target.closest(".node"); if (!nEl) return;
+    const n = nodes[nEl.dataset.id], r = nEl.getBoundingClientRect(), s = stage.getBoundingClientRect();
+    const inp = document.createElement("input");
+    inp.className = "rename"; inp.value = n.label; inp.setAttribute("aria-label", "Rename box");
+    inp.style.left = r.left - s.left + 8 + "px"; inp.style.top = r.top - s.top + 6 + "px"; inp.style.width = Math.max(140, r.width - 16) + "px";
+    stage.appendChild(inp); inp.focus(); inp.select();
+    const done = (keep) => { if (keep && inp.value.trim()) { n.label = inp.value.trim(); n.el.querySelector("text.l").textContent = n.label; size(n); updateEdges(new Set([n.id])); save(); showPanel(); } inp.remove(); };
+    inp.addEventListener("keydown", (k) => { if (k.key === "Enter") done(true); if (k.key === "Escape") done(false); });
+    inp.addEventListener("blur", () => done(true));
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.target.tagName === "INPUT") return;
+    if ((ev.key === "Delete" || ev.key === "Backspace") && sel && sel.type === "edge") { ev.preventDefault(); removeEdge(sel.id); }
+    if (ev.key === "Escape") select(null);
+  });
+
+  // ---------- toolbar ----------
+  const tabs = document.getElementById("tabs");
+  tabs.innerHTML = Object.keys(V).map((k) => '<button class="tab" role="tab" type="button" data-v="' + k + '">' + V[k].title + "</button>").join("");
+  tabs.addEventListener("click", (ev) => { const t = ev.target.closest(".tab"); if (t) load(t.dataset.v); });
+  document.getElementById("b-fit").onclick = fitView;
+  document.getElementById("b-in").onclick = () => zoom(1 / 1.2);
+  document.getElementById("b-out").onclick = () => zoom(1.2);
+  document.getElementById("b-reset").onclick = () => { store.del("canvas:" + viewKey); load(viewKey); toast("Layout reset"); };
+  const flowBtn = document.getElementById("b-flow");
+  flowBtn.onclick = () => {
+    flowOn = !flowOn; flowBtn.setAttribute("aria-pressed", String(flowOn)); flowBtn.textContent = flowOn ? "❚❚ Stop flow" : "▶ Animate flow";
+    edges.forEach((e) => e.dot && e.dot.setAttribute("visibility", flowOn ? "visible" : "hidden"));
+  };
+  document.getElementById("b-export").onclick = () => {
+    const cs = getComputedStyle(document.documentElement);
+    const vars = ["--bg", "--bg-elev", "--bg-sunk", "--fg", "--fg-muted", "--fg-faint", "--border", "--border-strong", "--accent", "--flax", "--warn", "--danger", "--ok", "--info", "--llm", "--display", "--font", "--mono"].map((v) => v + ":" + cs.getPropertyValue(v)).join(";");
+    const clone = svg.cloneNode(true);
+    clone.querySelectorAll(".handle, .hit, #g-dots, #tmp").forEach((x) => x.remove());
+    clone.setAttribute("xmlns", NS);
+    const css = [...document.styleSheets].flatMap((s) => { try { return [...s.cssRules].map((r) => r.cssText); } catch (e) { return []; } })
+      .filter((t) => /^\.(node|edge|flowdot|tmp)|^#arrow/.test(t)).join("\n");
+    const style = document.createElementNS(NS, "style");
+    style.textContent = "svg{" + vars + ";background:" + cs.getPropertyValue("--bg") + "}\n" + css;
+    clone.insertBefore(style, clone.firstChild);
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "halden-" + viewKey + ".svg"; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast("SVG exported");
+  };
+
+  document.getElementById("legend").innerHTML = Object.entries(KINDS).map(([k, [v, l]]) => '<span><i style="background:var(' + v + ')"></i>' + l + "</span>").join("");
+
+  // ---------- flow animation ----------
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function tick(ts) {
+    if (flowOn) {
+      edges.forEach((e) => {
+        if (!e.line || !e.dot) return;
+        const L = e.line.getTotalLength(); if (!L) return;
+        const f = ((ts / 1000) * (90 / L) + e.phase) % 1;
+        const q = e.line.getPointAtLength(f * L);
+        e.dot.setAttribute("cx", q.x); e.dot.setAttribute("cy", q.y);
+      });
+    }
+    requestAnimationFrame(tick);
+  }
+  if (!reduce) requestAnimationFrame(tick);
+
+  window.addEventListener("resize", fitView);
+  window.addEventListener("hashchange", () => { const k = location.hash.slice(1); if (V[k] && k !== viewKey) load(k); });
+  load(location.hash.slice(1) || "platform");
+})();
+</script>
+</body>
+</html>

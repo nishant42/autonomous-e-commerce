@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluation & Observability</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deep dive G · Evaluation and observability</div>
+<h1>Agents ship like code: tested, staged, measured</h1>
+<p class="lede">An agent is a bundle of prompt, tools, model and policy, versioned together. No bundle reaches production without passing offline evaluation, shadow mode and canary. In production, every decision is traceable, and a daily sample is re-judged.</p>
+
+<h2>Release pipeline for an agent</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  PR["Change<br/>(prompt / tool / model / policy)"] --> U["Unit tests<br/>tool schemas · policy (OPA) tests"]
+  U --> OFF["Offline eval<br/>golden set + adversarial set"]
+  OFF -- "≥ thresholds, no regressions" --> SH["Shadow<br/>7 days: decide, don't act<br/>diff vs current version"]
+  SH -- "agreement / uplift OK" --> CAN["Canary<br/>5% of tasks, T0 only"]
+  CAN -- "24-72h clean" --> PROD["Production"]
+  PROD --> MON["Online monitoring<br/>+ Auditor sampling"]
+  MON -- "regression" --> RB["Auto-rollback / quarantine"]
+  MON -- "new failure cases" --> OFF
+</script>
+</div>
+
+<h2>What gets evaluated</h2>
+<div class="table-wrap"><table>
+<tr><th>Agent type</th><th>Offline metrics</th><th>Online metrics</th><th>Gate example</th></tr>
+<tr><td>Forecasting (ML)</td><td>WAPE, bias, pinball loss at P10/P50/P90 on rolling-origin backtests</td><td>Forecast error vs actuals, stock-out rate, excess cover</td><td>WAPE not worse than current by &gt; 3%; bias within ±5%</td></tr>
+<tr><td>Procurement (LLM)</td><td>Decision agreement with expert-labelled cases; policy-violation attempts; cost per task</td><td>PO accuracy, amendments per PO, overbuy rate, verifier reject rate</td><td>≥ 97% on golden set; 0 limit-violation attempts on the adversarial set</td></tr>
+<tr><td>Doc extraction</td><td>Field-level precision and recall per document type and supplier</td><td>Verifier disagreement rate; manual corrections (should be zero)</td><td>≥ 99.5% on money fields</td></tr>
+<tr><td>Customer care</td><td>Groundedness, policy adherence, resolution correctness, tone (LLM-judge calibrated to labelled data)</td><td>CSAT, re-open rate, refund leakage, unsupported-claim rate from Reply QA</td><td>Unsupported-claim rate ≤ 0.5%</td></tr>
+<tr><td>Pricing</td><td>Simulated margin and sell-through on historical replays</td><td>Margin, conversion, price-change flapping</td><td>No floor or MAP violations in simulation</td></tr>
+<tr><td>All LLM agents</td><td>Prompt-injection suite; refusal correctness; tool-selection accuracy</td><td>Validation-error rate, tool rounds per task, tokens per task</td><td>Injection success = 0 on the suite</td></tr>
+</table></div>
+
+<div class="callout"><span class="t">Where the golden sets come from</span>
+<p>Real, redacted production cases: every incident, every Auditor finding, every verifier rejection and every T3 escalation becomes a labelled test case. The suite grows with the company's own edge cases. Using real traces also avoids the trap of evaluating on synthetic, easy examples.</p></div>
+
+<h2>Observability</h2>
+<div class="grid g2">
+  <div class="card"><h4>One trace per business flow</h4><p>OpenTelemetry context propagates from the webhook through the bus, workflow, harness, model call, tool call, gateway, adapter and vendor. The <code>correlationid</code> links it to the case, so "why did this happen?" is a single trace view.</p></div>
+  <div class="card"><h4>LLM-specific spans</h4><p>Model, deployment, prompt version, input and output tokens, cached tokens, latency, tool calls and finish reason. Content is stored with PII redaction and retention limits.</p></div>
+</div>
+
+<h3>SLOs</h3>
+<div class="table-wrap"><table>
+<tr><th>SLO</th><th>Target</th><th>Why it matters</th></tr>
+<tr><td>Human-touch rate (T3 + manual interventions)</td><td class="num">&lt; 1% of decisions</td><td>This is the "no humans in daily operations" requirement, measured.</td></tr>
+<tr><td>Order-to-3PL release latency (p95)</td><td class="num">&lt; 5 min</td><td>Same-day dispatch cut-offs</td></tr>
+<tr><td>Customer first response (p90)</td><td class="num">&lt; 2 min</td><td>Premium-brand expectation</td></tr>
+<tr><td>Supplier inbound processed (p95)</td><td class="num">&lt; 15 min</td><td>Fast reaction to delays and price changes</td></tr>
+<tr><td>Stock accuracy (Ledger vs 3PL)</td><td class="num">≥ 99.5% SKU-nodes</td><td>Overselling hurts customers and the brand</td></tr>
+<tr><td>Kill-switch propagation</td><td class="num">≤ 1 s</td><td>Containment speed</td></tr>
+<tr><td>Auditor-confirmed bad-action rate (T0/T1)</td><td class="num">&lt; 0.2%</td><td>The trust metric that justifies widening autonomy</td></tr>
+</table></div>
+
+<h3>Dashboards</h3>
+<ul>
+  <li><strong>Company health</strong> (owners): revenue, margin, cash runway, stock cover distribution, human-touch rate, open incidents.</li>
+  <li><strong>Agent fleet</strong>: per agent and version: tasks, success, validation errors, verifier rejects, tokens and cost, latency, quarantine state.</li>
+  <li><strong>Control Tower</strong>: anomaly scores, spend velocity vs caps, active kill switches, pending T3 items.</li>
+</ul>
+
+</div></main>
+</body>
+</html>

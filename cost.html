@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cost Model</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deep dive H · Cost model and optimisation</div>
+<h1>Tokens are the smallest line on the bill</h1>
+<p class="lede">A common assumption is that "AI company" means "LLM bill". With a deterministic-first design, model routing and caching, LLM tokens are single-digit percent of platform run cost. Most of the money goes to reliable infrastructure and bought SaaS. That is the right shape: we pay for correctness, not for tokens.</p>
+
+<div class="callout warn"><span class="t">Read these numbers as planning estimates</span>
+<p>Figures are USD per month for the sizing on the overview page (about 400 orders/day). Rows marked "list price" were checked against published prices in October 2026; rows marked "our estimate" depend on usage we can only size roughly. They show the shape and order of magnitude. Before any commitment, validate them with the Azure Pricing Calculator, current model price sheets and vendor quotes.</p></div>
+
+<h2>Monthly run cost (indicative)</h2>
+<div class="grid g4">
+  <div class="card stat"><div class="v">$7.5-13k</div><div class="l">total platform / month</div></div>
+  <div class="card stat"><div class="v">≈ $0.85</div><div class="l">platform cost per order (12k orders/month)</div></div>
+  <div class="card stat"><div class="v">~3%</div><div class="l">of it is LLM tokens</div></div>
+  <div class="card stat"><div class="v">12-15</div><div class="l">operations roles it replaces (our estimate)</div></div>
+</div>
+
+<div class="diagram">
+<script type="text/x-mermaid">
+pie showData
+  title Monthly run cost by category (midpoint, USD)
+  "Azure infrastructure" : 5050
+  "Commerce & ops SaaS" : 4820
+  "LLM tokens" : 350
+  "Document Intelligence" : 90
+</script>
+</div>
+
+<div class="table-wrap"><table>
+<tr><th>Component</th><th>Sizing assumption</th><th class="num">$/month</th><th>Basis</th></tr>
+<tr><td colspan="4"><strong>Azure infrastructure</strong></td></tr>
+<tr><td>Container Apps (harness, gateway, adapters, RPA jobs)</td><td>~12 apps, scale-to-zero for batch and RPA</td><td class="num">300-600</td><td><span class="tag">our estimate</span></td></tr>
+<tr><td>PostgreSQL Flexible Server</td><td>4 vCore (~$260-290 compute), zone-redundant HA doubles it, plus a DR replica and storage</td><td class="num">850-1,050</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>Service Bus Premium (+ Event Hubs Standard)</td><td>1 messaging unit ($677) + small Event Hubs</td><td class="num">700-800</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>API Management (AI gateway)</td><td>Basic v2 (~$210) to Standard v2 (~$734)</td><td class="num">210-740</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>Redis</td><td>Standard C1 (~$80) to Premium P1</td><td class="num">80-400</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>AI Search</td><td>Basic ($74) to S1</td><td class="num">75-250</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>Azure ML (nightly training + endpoints)</td><td>CPU training, 3-4 small endpoints</td><td class="num">300-800</td><td><span class="tag">our estimate</span></td></tr>
+<tr><td>Lakehouse (ADLS + Fabric capacity)</td><td>Fabric F2 (~$262) up to F4, paused off-hours</td><td class="num">260-600</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>Monitoring (Log Analytics / App Insights)</td><td>100-200 GB/month at $2.30/GB, first 5 GB free</td><td class="num">220-460</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>Security (Firewall, Defender, Key Vault, Private Link)</td><td>Firewall Basic (~$288 + $0.065/GB), ~10 private endpoints, Defender, Key Vault</td><td class="num">400-600</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>Temporal Cloud</td><td>Essentials plan: $100 minimum includes 1M actions</td><td class="num">100-300</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td colspan="4"><strong>Bought SaaS</strong> (variable fees such as Stripe % and 3PL per-order are cost of sales, not platform)</td></tr>
+<tr><td>Shopify Plus</td><td>Platform fee: $2,300 (3-year term) to $2,500 (1-year)</td><td class="num">2,300-2,500</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>Klaviyo</td><td>50k active profiles ($720) to ~100k</td><td class="num">720-1,400</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>Gorgias</td><td>Billed per ticket: Pro ($360, 2,000 tickets) to Advanced ($900, 5,000); we expect ~3,600/month</td><td class="num">360-900</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>EDI provider</td><td>3-5 trading partners</td><td class="num">300-1,000</td><td><span class="tag">our estimate</span></td></tr>
+<tr><td>Accounting</td><td>Xero at this scale</td><td class="num">~80</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td colspan="4"><strong>AI consumption</strong></td></tr>
+<tr><td>LLM tokens (all agents)</td><td>See token model below (≈ $193 before caching, plus headroom)</td><td class="num">200-500</td><td><span class="tag lo">list price</span></td></tr>
+<tr><td>Document Intelligence</td><td>~9k pages at $10 per 1,000 (prebuilt invoice model)</td><td class="num">~90</td><td><span class="tag lo">list price</span></td></tr>
+</table></div>
+
+<h2>Token model</h2>
+<p>Daily volumes are derived from business drivers. Prices are Azure OpenAI Global Standard list prices per 1M tokens: small = GPT-5 nano ($0.05 in / $0.40 out), mid = GPT-5 mini ($0.25 / $2.00), frontier = GPT-5 ($1.25 / $10.00).</p>
+<div class="table-wrap"><table>
+<tr><th>Workload</th><th>Driver</th><th>Tier</th><th class="num">Input tok/day</th><th class="num">Output tok/day</th></tr>
+<tr><td>Customer care resolution</td><td>120 tickets × 4 calls × 5k</td><td>Mid</td><td class="num">2.40M</td><td class="num">0.19M</td></tr>
+<tr><td>Triage (tickets + supplier email)</td><td>180 items × 1.5k</td><td>Small</td><td class="num">0.27M</td><td class="num">0.01M</td></tr>
+<tr><td>Supplier doc extraction + verify</td><td>60 docs × ~17k</td><td>Mid</td><td class="num">1.02M</td><td class="num">0.08M</td></tr>
+<tr><td>Reply QA</td><td>150 replies × 4k</td><td>Small</td><td class="num">0.60M</td><td class="num">0.03M</td></tr>
+<tr><td>Procurement / planning reasoning</td><td>40 tasks × 6 rounds × 8k</td><td>Frontier</td><td class="num">1.92M</td><td class="num">0.12M</td></tr>
+<tr><td>Buy / promo panels</td><td>3 panels × 4 calls × 12k</td><td>Frontier</td><td class="num">0.14M</td><td class="num">0.02M</td></tr>
+<tr><td>Marketing strategy + creative</td><td>80 calls × 4k</td><td>Mid</td><td class="num">0.32M</td><td class="num">0.08M</td></tr>
+<tr><td>Catalogue content</td><td>30 products × 3 × 6k</td><td>Mid</td><td class="num">0.54M</td><td class="num">0.09M</td></tr>
+<tr><td>Explainers, incidents, Auditor</td><td>200 × 5k</td><td>Mid</td><td class="num">1.00M</td><td class="num">0.10M</td></tr>
+<tr><td><strong>Total</strong></td><td></td><td></td><td class="num"><strong>8.2M</strong></td><td class="num"><strong>0.72M</strong></td></tr>
+</table></div>
+<p>Monthly, about 246M input and 22M output tokens. At those rates: frontier ≈ $119, mid ≈ $72, small ≈ $2, so <strong>≈ $193/month before caching</strong>. The $200-500 budget line adds headroom for peaks (Black Friday runs about 3-5× volume), retries, evaluation runs, and the hidden reasoning tokens these models bill as output. Using Claude Sonnet via Foundry ($3 / $15) as the frontier model instead would raise the total to about $320/month.</p>
+
+<h2>How cost is controlled</h2>
+<div class="grid g2">
+  <div class="card"><h4>Design levers (biggest effect)</h4><ul>
+    <li><strong>Deterministic first.</strong> Forecasting, allocation, reconciliation and refund decisions use no LLM tokens at all.</li>
+    <li><strong>Model routing.</strong> About 84% of calls go to small or mid models. The frontier model takes about 16% of calls (procurement and panels) and about 60% of token spend, which is where the reasoning value is.</li>
+    <li><strong>Escalate, don't default.</strong> Small-model extraction goes to the frontier model only when confidence is low.</li>
+    <li><strong>Verifiers where they pay.</strong> T2, money fields and customer text are always verified; everything else is sampled.</li>
+  </ul></div>
+  <div class="card"><h4>Runtime levers</h4><ul>
+    <li><strong>Prompt caching.</strong> Stable prefix first (instructions, then tool schemas), dynamic context last. Cached input tokens are billed at a steep discount.</li>
+    <li><strong>Context budgets.</strong> A light reference on follow-up turns; tool results truncated for the model with full data kept by <code>resultId</code>; memory compressed to summary and facts.</li>
+    <li><strong>Batch APIs</strong> for overnight, non-urgent work (catalogue refresh, Auditor sampling, evaluations), at a lower price.</li>
+    <li><strong>Semantic cache</strong> at the AI gateway for repeated FAQ-style lookups.</li>
+    <li><strong>Hard quotas</strong> per agent per day at the gateway, plus cost-per-task anomaly alerts in the Sentinel.</li>
+  </ul></div>
+  <div class="card"><h4>Infrastructure levers</h4><ul>
+    <li>Scale-to-zero for adapters, RPA and batch; KEDA scaling on queue depth.</li>
+    <li>Reserved capacity or savings plans for Postgres and Service Bus once the baseline is stable (typically 30-40% off).</li>
+    <li>Log sampling and retention tiers; PII-free, low-volume LLM content capture.</li>
+    <li>Ephemeral preview environments per branch, destroyed on merge.</li>
+  </ul></div>
+  <div class="card"><h4>Unit economics we track</h4><ul>
+    <li>Platform cost per order and per € of GMV.</li>
+    <li>LLM cost per resolved ticket, per supplier document, per PO.</li>
+    <li>Cost per agent per version: a new version must not raise cost per task by more than 15% without matching quality gains (an evaluation gate).</li>
+  </ul></div>
+</div>
+
+</div></main>
+</body>
+</html>

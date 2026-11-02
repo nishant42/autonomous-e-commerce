@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Technical Architecture (HLD)</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">03 · Technical architecture · High-level design</div>
+<h1>Six planes, one choke point for side effects</h1>
+<p class="lede">The platform separates <strong>thinking</strong> (the agent runtime) from <strong>doing</strong> (the Action Gateway and adapters) and from <strong>remembering</strong> (the data plane). Events connect them and durable workflows sequence them. Security and observability span all of them.</p>
+
+<h2>System context (C4 level 1)</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  C(["Customers"]) --> SHOP["Shopify storefront<br/>+ checkout"]
+  SHOP --> CORE
+  STR["Stripe"] <--> CORE
+  CORE[["Halden Autonomous<br/>Operations Platform"]]
+  CORE <--> SUP(["Suppliers<br/>(Yves Delorme, ...)<br/>API · EDI · portal · email"])
+  CORE <--> TPL(["3PL WMS<br/>UK + EU nodes"])
+  CORE <--> CAR(["Carriers"])
+  CORE <--> ADS(["Ad platforms<br/>Google · Meta"])
+  CORE <--> CRM(["Klaviyo · Gorgias"])
+  CORE <--> ACC(["Accounting<br/>+ bank feed"])
+  CORE --> OWN(["Owners<br/>(exceptions only)"])
+</script>
+</div>
+<p class="caption">Figure 3.1: System context. Everything the business touches goes through one platform boundary.</p>
+
+<h2>Container view (C4 level 2)</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart TB
+  EXT["External systems<br/>Shopify · Stripe · 3PL · Suppliers · Ads · CRM · Helpdesk · Accounting/Bank"]
+
+  subgraph INT["① Integration plane"]
+    direction LR
+    GW["API Management<br/>webhook ingress · signature verify"] --> ADP["Adapters (Container Apps)<br/>Shopify · Stripe · 3PL · EDI · Email · Portal RPA"]
+  end
+
+  subgraph BUS["② Event backbone"]
+    direction LR
+    SB["Service Bus<br/>business events · commands · DLQ"]
+    EH["Event Hubs<br/>clickstream · telemetry"]
+  end
+
+  subgraph BRAIN["③ Workflows · ④ Agents"]
+    direction LR
+    TMP["Temporal<br/>durable workflows"] --> H["Agent Harness<br/>context · tool loop · verify · memory"]
+    H --> AIG["AI Gateway (APIM)<br/>routing · quotas · cache · safety"] --> FDY["Azure AI Foundry<br/>models · agent service · evals"]
+    H --> MLS["Azure ML endpoints<br/>forecast · elasticity · anomaly"]
+  end
+
+  subgraph ACT["⑤ Action plane"]
+    AGW["Action Gateway<br/>policy (OPA) · limits · idempotency · tiers · audit"]
+  end
+
+  subgraph DATA["⑥ Data plane"]
+    direction LR
+    PG[("PostgreSQL<br/>Ops Ledger · outbox · memory")]
+    RD[("Redis<br/>counters · locks")]
+    LK[("Lakehouse<br/>history · features")]
+    AIS[("AI Search<br/>policies · contracts")]
+  end
+
+  CTRL["Control plane<br/>agent registry · kill switches · quarantine · evaluation · console"]
+
+  EXT <--> INT
+  ADP -- "normalised CloudEvents" --> SB
+  SB --> TMP
+  H -- "Action Proposals" --> AGW
+  AGW -- "execute via adapters" --> ADP
+  AGW --> PG
+  PG -- "outbox relay" --> SB
+  BRAIN -. "reads (snapshots, RAG)" .-> DATA
+  CTRL -. "governs" .-> BRAIN
+  CTRL -. "halts" .-> AGW
+</script>
+</div>
+<p class="caption">Figure 3.2: Container view. Agents never call external systems directly. Every side effect flows Harness → Action Gateway → Adapter, and every state change returns to the bus through the outbox.</p>
+
+<h2>Plane responsibilities</h2>
+<div class="table-wrap"><table>
+<tr><th>Plane</th><th>Responsibility</th><th>Key design choices</th></tr>
+<tr><td><strong>① Integration</strong></td><td>Translate the outside world into typed events and commands</td><td>Verify webhook HMAC signatures. Inbox deduplication by provider event ID. One adapter per external system behind a stable internal contract (anti-corruption layer).</td></tr>
+<tr><td><strong>② Event backbone</strong></td><td>Asynchronous, durable fan-out between domains</td><td>Service Bus for business events (sessions give per-SKU/per-PO ordering, DLQ, scheduled delivery). Event Hubs for high-volume telemetry. CloudEvents envelope with schema registry.</td></tr>
+<tr><td><strong>③ Orchestration</strong></td><td>Multi-step, long-running, must-complete processes</td><td>Temporal durable workflows. Timers of days or weeks (PO acknowledgement SLA), retries with backoff, sagas with compensation, full history replay.</td></tr>
+<tr><td><strong>④ Agent runtime</strong></td><td>Run LLM, ML and rules agents safely</td><td>Stateless harness pods. Model access only through the AI gateway (routing, quotas, caching, content safety). ML models served as versioned endpoints.</td></tr>
+<tr><td><strong>⑤ Action plane</strong></td><td>The only path to side effects</td><td>Policy-as-code (OPA/Rego). Spend and velocity counters in Redis. Idempotency table in Postgres. Tiered approval (verifier, panel, human). Immutable audit.</td></tr>
+<tr><td><strong>⑥ Data</strong></td><td>Shared truth, memory and analytics</td><td>Postgres is the operational truth with an append-only ledger. The lakehouse holds history, features and training data. AI Search covers policy and contract retrieval.</td></tr>
+<tr><td><strong>Control plane</strong></td><td>Govern the fleet</td><td>Agent registry (versioned contracts), kill switches, quarantine, evaluation gates, and a console for owners.</td></tr>
+</table></div>
+
+<h2>Anatomy of one autonomous decision</h2>
+<p>Every decision, whether a price change or a PO, follows the same skeleton. Only the tools and tier thresholds differ.</p>
+<div class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant EV as Event (Service Bus)
+  participant WF as Workflow (Temporal)
+  participant H as Harness
+  participant M as Model (via AI Gateway)
+  participant T as Read tools
+  participant V as Verifier
+  participant AG as Action Gateway
+  participant AD as Adapter
+  participant L as Ops Ledger
+  EV->>WF: stock.low {sku, node}
+  WF->>H: run(procurement-agent, task, idempotencyKey)
+  H->>H: assemble context (typed snapshot, memory, policies)
+  loop bounded tool loop (≤ 8 rounds)
+    H->>M: instructions + context + tools
+    M-->>H: tool_call(get_supplier_terms)
+    H->>T: validated call (schema, scope, ownership)
+    T-->>H: result (truncated for model, full kept by resultId)
+  end
+  M-->>H: propose_action(CreatePurchaseOrder{...})
+  H->>V: verify(proposal, evidence)
+  V-->>H: pass
+  H->>AG: ActionProposal (signed, idempotencyKey)
+  AG->>AG: policy · limits · idempotency · tier
+  AG->>L: record proposal + decision (same txn as outbox)
+  AG->>AD: execute (EDI 850 / email / portal)
+  AD-->>AG: result
+  AG->>L: record execution → outbox → po.created
+</script>
+</div>
+<p class="caption">Figure 3.3: Decision skeleton. The model expresses intent; validation, execution and recording are deterministic.</p>
+
+<h2>Deployment topology</h2>
+<div class="grid g3">
+  <div class="card"><h4>Regions</h4><p>Primary: UK South. Warm DR: West Europe, with Postgres geo-replica, Service Bus geo-DR alias and Temporal multi-region namespace. RPO ≤ 5 minutes, RTO ≤ 1 hour.</p></div>
+  <div class="card"><h4>Environments</h4><p>dev → staging (uses sandbox Shopify, Stripe test mode and supplier simulators) → prod. Each environment has separate identities, secrets and model deployments. Agents are promoted only after they pass evaluation gates.</p></div>
+  <div class="card"><h4>Network</h4><p>Private endpoints for Postgres, Service Bus, Key Vault and Foundry. Egress goes through Azure Firewall with an allow-list per adapter. Browser-automation workers run in an isolated subnet with no path to internal data.</p></div>
+</div>
+
+<div class="decision">
+<span class="t">Decision</span>
+<h4>Why a single Action Gateway instead of giving each agent its own API clients?</h4>
+<dl>
+  <dt>Chosen</dt><dd>Every side effect goes through one gateway, which enforces policy, limits, idempotency, tiering and audit in one place.</dd>
+  <dt>Rejected</dt><dd>Agents holding vendor SDKs and credentials (for example an agent calling Stripe directly).</dd>
+  <dt>Why</dt><dd>Safety controls are only as strong as their weakest bypass. One choke point makes limits provable. A kill switch becomes a single flag. Credentials never reach model context. Audit is complete by construction.</dd>
+  <dt>Cost</dt><dd>The gateway is a critical dependency, so it is kept stateless, horizontally scaled and deployed in two regions. Every new action type needs a schema and a policy, which is the point.</dd>
+</dl>
+</div>
+
+</div></main>
+</body>
+</html>

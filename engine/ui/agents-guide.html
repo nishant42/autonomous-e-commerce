@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The three agents · Plain-English guide</title>
+<style>
+:root{color-scheme:dark;--bg:#10151d;--panel:#172130;--line:#34465e;--text:#edf2f9;--muted:#aec0d7;--blue:#a6c9ff;--green:#9ae0c0}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:85px}body{margin:0;background:var(--bg);color:var(--text);font:17px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:auto;height:auto}header{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:17px max(22px,calc((100vw - 1060px)/2));border-bottom:1px solid var(--line);background:#10151df5;position:sticky;top:0;z-index:2}header a{font-size:13px;color:#b8d5ff;text-decoration:none}header strong{font-size:13px;letter-spacing:.1em}header nav{display:flex;gap:22px}main{max-width:1060px;padding:45px 25px 90px;margin:auto}h1{font-size:clamp(32px,4.5vw,49px);line-height:1.15;font-weight:650;letter-spacing:-.04em;max-width:780px;margin:0 0 20px}h2{font-size:29px;line-height:1.25;letter-spacing:-.025em;font-weight:600;margin:8px 0 14px}h3{font-size:18px;color:#d6e5fa;font-weight:600;margin:28px 0 10px}.intro{font-size:18px;max-width:790px;color:var(--muted)}.jump{display:flex;flex-wrap:wrap;gap:10px;margin:27px 0}.jump a{padding:10px 15px;border:1px solid #4b6587;border-radius:5px;text-decoration:none;color:#c4dcff;font-size:14px}.section{padding:38px 0;border-top:1px solid var(--line)}.number{font:12px ui-monospace,monospace;letter-spacing:.09em;color:var(--blue)}.purpose{font-size:19px;color:#cbdcf2;margin:0 0 22px}.purpose strong{color:#fff}ul{padding-left:25px;margin:12px 0}li{padding-left:5px;margin:0 0 17px}li::marker{color:#8eb6ee}li strong{color:#f2f6fc;font-weight:600}.bracket{color:#afc1da}.example{padding:21px 24px;background:#1b2c43;border-left:3px solid #8db9f8;border-radius:0 7px 7px 0;margin:22px 0}.example p{margin:6px 0}.example .label{font:11px ui-monospace,monospace;letter-spacing:.08em;color:#a8c9f5}.math{font-family:ui-monospace,monospace;color:#dbeaff;font-size:15px;overflow-wrap:anywhere}.say{padding:20px 24px;background:#152c25;border:1px solid #3c6556;border-radius:7px;color:#d3ecdf;margin:24px 0}.say span{display:block;font:11px ui-monospace,monospace;color:var(--green);letter-spacing:.08em;margin-bottom:8px}.say p{margin:0}.definition{background:#202b3d;border:1px solid #526988;border-radius:7px;padding:18px 22px;margin:20px 0}.definition p{margin:6px 0}.small{font-size:14px;color:#9fb4d0}.steps{counter-reset:learning;list-style:none;padding-left:0}.steps li{counter-increment:learning;border-left:2px solid #526e93;padding:6px 0 6px 19px;margin-bottom:18px}.steps li:before{content:counter(learning) ". ";color:#a6c9ff;font-weight:650}.status{border:1px solid #63513b;background:#251f18;border-radius:7px;padding:20px 24px;color:#e3d4bc}.status h3{color:#f1dfc5;margin-top:0}.status li{font-size:15px;margin-bottom:11px}.flow{font-size:15px;color:#bdcfe7;line-height:2;padding:20px 0}.links{display:flex;gap:20px;flex-wrap:wrap;margin-top:25px}.links a{color:#b5d1fb;font-size:14px}button{font:inherit}.print{font-size:12px;color:#b8d5ff;background:none;border:1px solid #405c80;border-radius:5px;padding:5px 10px;cursor:pointer}:focus-visible{outline:2px solid #a6c9ff;outline-offset:4px}@media(max-width:650px){main{padding:30px 20px 60px}body{font-size:16px}header{padding:12px 20px;flex-wrap:wrap}header nav{gap:17px}h2{font-size:25px}.section{padding:30px 0}.example,.definition,.say,.status{padding:17px}.math{font-size:13px}li{margin-bottom:16px}}@media print{body{background:white;color:#111;font-size:11pt}header,.jump,.links,.print{display:none}main{max-width:none;padding:0}h1{font-size:26pt}h2{font-size:19pt}.bracket,.intro,.purpose,.small,.number,.math{color:#333}li strong{color:#000}.example,.definition,.say,.status{background:#f4f4f4;color:#111;border-color:#999}.section{break-inside:auto}.say,.example{break-inside:avoid}.status h3,h3{color:#111}}
+</style>
+</head>
+<body>
+<header><strong>HALDEN · EXPLAIN THE AGENTS</strong><nav><a href="/">Shop</a><a href="/map">Agent map</a><a href="/flow">Recorded walkthrough</a><button class="print" onclick="window.print()">Print</button></nav></header>
+<main>
+<h1>The three agents, in plain English.</h1>
+<p class="intro">Each agent has a business job. Below, every bullet explains <strong>what it does</strong>, followed by <span class="bracket">[what the term means and how it works]</span>.</p>
+<div class="jump" aria-label="Jump to an explanation"><a href="#reorder">1 · Reorder</a><a href="#marketing">2 · Marketing</a><a href="#verdict">3 · Product verdict</a><a href="#ridge">Ridge & feature selection</a></div>
+<p class="flow">Shop records an order → adapter reads it → facts are stored → agents propose decisions → gate checks permission → executor carries out approved actions.</p>
+
+<section class="section" id="reorder">
+<div class="number">AGENT 1</div><h2>Reorder: what stock should we buy?</h2>
+<p class="purpose"><strong>Its job:</strong> avoid running out of popular items and avoid buying too much of slow-selling items.</p>
+<h3>What it checks, and how</h3>
+<ul>
+<li><strong>Reads sales and stock history.</strong> <span class="bracket">[An order tells us what sold. A stock snapshot is a saved reading of how much was available at a particular time. Together, they show whether customers actually had a chance to buy.]</span></li>
+<li><strong>Estimates demand using buyable time.</strong> <span class="bracket">[Demand means how much people would buy if the item were available. Divide units sold by the days it was available, then extend that daily rate across the period we are studying. This assumes those available days give a useful estimate of normal demand.]</span></li>
+</ul>
+<div class="example"><div class="label">THE TOWEL EXAMPLE · SEEDED CASE STUDY</div><p><strong>Black:</strong> 20 sold while buyable for 22 days.</p><p class="math">20 ÷ 22 = about 0.91 per buyable day<br>0.91 × 90 days = about 81.8 units before returns</p><p><strong>White:</strong> 20 sold while buyable for 90 days.</p><p class="math">20 ÷ 90 = about 0.22 per buyable day</p><p class="small">The engine uses unrounded rates. Both sold 20, but black sold much faster whenever it was actually available.</p></div>
+<ul>
+<li><strong>Removes estimated sales borrowed from another colour.</strong> <span class="bracket">[Substitution means a shopper buys white because black is sold out. The engine compares sales rates when siblings were available versus unavailable, and estimates how much of white’s apparent demand was temporary.]</span></li>
+<li><strong>Adjusts discount-driven sales.</strong> <span class="bracket">[A reduced price can create extra sales. A configured price-sensitivity assumption estimates demand at the intended selling price. This is an estimate, not proof of exactly how every shopper would react.]</span></li>
+<li><strong>Accounts for returns and unusually large sales days.</strong> <span class="bracket">[Returns reduce retained sales. Very large days are capped at an observed daily-sales threshold so one unusual day cannot dominate the estimate.]</span></li>
+<li><strong>Works out demand until the next replenishment opportunity.</strong> <span class="bracket">[Supplier lead time means how long delivery takes. Review period means the time until we next reconsider ordering. Estimated daily demand is extended across both.]</span></li>
+<li><strong>Balances the two costs of being wrong.</strong> <span class="bracket">[Too little stock loses profit; too much creates holding, markdown or expiry costs. The “newsvendor” calculation turns those costs into a target demand level. Expensive missed sales favour more stock; expensive leftovers favour less.]</span></li>
+<li><strong>Subtracts stock already available or ordered, then respects supplier rules.</strong> <span class="bracket">[On hand = in the warehouse. On order = already recorded as ordered. Case pack = how many units come in one box. Subtracting existing commitments prevents ordering the same stock twice.]</span></li>
+</ul>
+<h3>Which AI or ML does it use?</h3>
+<ul>
+<li><strong>The core demand and quantity calculations use explicit formulas.</strong> <span class="bracket">[They are reproducible calculations, not Ridge predictions. You can trace the answer back to sales, availability, costs and supplier terms.]</span></li>
+<li><strong>A language-model layer can investigate and choose a computed option.</strong> <span class="bracket">[It may ask to read availability, returns or supplier information. It must choose one of the calculator’s permitted quantities, decline to order, or escalate. If its answer fails validation, the deterministic fallback applies.]</span></li>
+</ul>
+<div class="say"><span>SAY THIS</span><p>“I do not treat units sold as demand. I correct for the time customers could actually buy, then let the item’s economics and existing stock decide the order quantity.”</p></div>
+</section>
+
+<section class="section" id="marketing">
+<div class="number">AGENT 2</div><h2>Marketing: where should advertising money go?</h2>
+<p class="purpose"><strong>Its job:</strong> direct the advertising budget towards promising opportunities while respecting stock and spending limits.</p>
+<div class="definition"><p><strong>Creative</strong> <span class="bracket">[the advertisement itself: its picture, video, headline or text]</span>.</p><p><strong>Creative age</strong> <span class="bracket">[how many days the same advertisement has been running; it is not a webpage]</span>.</p><p><strong>CPA: cost per acquisition</strong> <span class="bracket">[advertising spend divided by acquired orders; €200 spent for 10 orders means €20 per order]</span>.</p></div>
+<h3>Three decisions, from largest to smallest</h3>
+<ul>
+<li><strong>1. Choose the products to fund.</strong> <span class="bracket">[Compare contribution per order—what remains after the included selling costs—with the cost of acquiring an order. A strong ratio can earn a budget share. Low stock, a stop recommendation or a spent test budget can block funding.]</span></li>
+<li><strong>2. Split a product’s budget between channels.</strong> <span class="bracket">[A channel is an advertising platform such as Google, Meta or TikTok. Compare each channel’s measured return. The product-budget splitter keeps a small exploration floor so a channel still receives enough funding to keep learning about it.]</span></li>
+<li><strong>3. Decide what to do with each advertisement.</strong> <span class="bracket">[An ad cell is one measured advertising unit. The system compares its acquisition cost with a target derived from contribution margin and a configured payback allowance.]</span></li>
+</ul>
+<h3>The daily rules</h3>
+<ul>
+<li><strong>CPA at or below 80% of target → increase the daily budget by 20%.</strong> <span class="bracket">[The ad is comfortably inside the configured target, so it may have room to grow.]</span></li>
+<li><strong>CPA above 80%, up to 100% → hold.</strong> <span class="bracket">[It is within target, but has less room for a safe increase.]</span></li>
+<li><strong>CPA above 100%, up to 150% → reduce by 20%, subject to a minimum budget.</strong> <span class="bracket">[It is too expensive, but the rule keeps a measurable test running rather than immediately stopping it.]</span></li>
+<li><strong>CPA above 150% → pause.</strong> <span class="bracket">[Once enough evidence exists, continuing at that cost is outside the configured rule.]</span></li>
+<li><strong>Check evidence, stock, measurement quality and cooldown first.</strong> <span class="bracket">[A few clicks are not enough to judge an ad. Low stock can block more acquisition. Unreliable order counts freeze scaling. Cooldown means waiting 48 hours after a change instead of repeatedly editing the same budget.]</span></li>
+<li><strong>Check whether the advertisement is wearing out.</strong> <span class="bracket">[Frequency = how often a person sees it. Click-through rate = the percentage of views that turn into clicks. High frequency plus falling click-through rate can trigger a request for new advertising content.]</span></li>
+</ul>
+<h3>Which ML does it use, and why?</h3>
+<ul>
+<li><strong>Ridge regression estimates weekly advertising orders.</strong> <span class="bracket">[It learns a weighted relationship between measured advertising signals and order counts. It supplies an estimate; the rules still decide the action. The detailed explanation is immediately below.]</span></li>
+<li><strong>The model’s estimate can be compared with actual results.</strong> <span class="bracket">[Estimated orders imply an estimated cost per order. The engine reconciles that with observed cost; if the two disagree too much, the observation wins.]</span></li>
+<li><strong>A language-model layer can investigate why an ad needs attention.</strong> <span class="bracket">[It may read performance, creative history or stock. It can choose only a permitted action and cannot invent the euro budget or bypass guards.]</span></li>
+</ul>
+<div class="say"><span>SAY THIS</span><p>“The model estimates performance. The rules decide what action is allowed. The agent checks product, channel and individual-ad performance before proposing a budget change.”</p></div>
+</section>
+
+<section class="section" id="ridge">
+<div class="number">THE MARKETING ML · NO PRIOR ML KNOWLEDGE NEEDED</div><h2>What are features, feature selection and Ridge?</h2>
+<ol class="steps">
+<li><strong>A feature is one input to a prediction.</strong> <span class="bracket">[Examples in the stored model include clicks, creative age, frequency, search interest, stock cover and previous order counts. They are columns of numbers describing the ad and its situation.]</span></li>
+<li><strong>The target is the number we want to estimate.</strong> <span class="bracket">[Here it is a weekly order count. Training examples contain both the input measurements and the known order count, so the model can learn a relationship between them.]</span></li>
+<li><strong>Feature selection chooses which inputs to keep.</strong> <span class="bracket">[Some measurements help; others are irrelevant or repeat the same information. The pipeline removes unsuitable inputs and uses Lasso as a selection aid. Lasso can push weak input weights to zero, which helps identify inputs to leave out.]</span></li>
+<li><strong>A weight describes how strongly an input affects the estimate.</strong> <span class="bracket">[Training adjusts the weights so the combined estimate matches the known training order counts as closely as possible. A weight describes a learned association; it does not prove that the input causes sales.]</span></li>
+<li><strong>Ridge learns those weights, with a penalty for extreme values.</strong> <span class="bracket">[Think of a fitted spreadsheet formula that combines the inputs. The penalty discourages the formula from using very large weights just to match random quirks in the training data. Ridge mainly shrinks weights; the separate selection stage chooses inputs.]</span></li>
+<li><strong>Overfitting means learning accidents in the practice data.</strong> <span class="bracket">[A model can look excellent on examples it has already seen and fail on unfamiliar examples. Ridge’s penalty helps reduce that risk; it does not eliminate the need for testing.]</span></li>
+<li><strong>Data leakage means accidentally giving the model the answer.</strong> <span class="bracket">[For example, CPA already contains orders in its denominator. Using that as an input to estimate those same orders would make the task misleadingly easy. The pipeline checks for target-derived inputs and overlapping windows.]</span></li>
+<li><strong>The pipeline compares algorithms on a later-date test set.</strong> <span class="bracket">[Earlier dates are used to fit candidates; later held-out dates measure their performance. Candidates include Ridge, Lasso, random forest and gradient boosting, with optional additional libraries. A baseline is a simple comparison such as the previous period’s orders.]</span></li>
+<li><strong>The recorded winner is Ridge on a simulated advertising panel.</strong> <span class="bracket">[The recorded R² is about 0.984. R² measures explained variation on that test data; it is not “98.4% accurate.” This demo result does not establish real-world forecasting quality.]</span></li>
+</ol>
+<div class="example"><div class="label">ILLUSTRATIVE EXAMPLE · NOT A LIVE MODEL OUTPUT</div><p>Suppose a model estimates <strong>20 orders</strong> for <strong>€400 of advertising</strong>.</p><p class="math">€400 ÷ 20 = €20 estimated cost per order</p><p>If the target cost is €25, that estimate is 80% of target. The band permits an increase <strong>only if the other checks also pass</strong>.</p></div>
+<div class="say"><span>SAY THIS</span><p>“A feature is an input. Feature selection removes unhelpful inputs. Ridge learns how much weight to give the remaining inputs while discouraging extreme weights. I compare the result with simple baselines and held-out data.”</p></div>
+</section>
+
+<section class="section" id="verdict">
+<div class="number">AGENT 3</div><h2>Product verdict: grow it, fix it, or stop it?</h2>
+<p class="purpose"><strong>Its job:</strong> identify whether weak performance comes from the shop, supply, price, advertising or the product itself.</p>
+<h3>What it checks, and how</h3>
+<ul>
+<li><strong>Checks whether there is enough evidence.</strong> <span class="bracket">[A product with very few sales or too little measured exposure has not had a fair test. The result should be “continue testing,” rather than a confident judgment.]</span></li>
+<li><strong>Finds where shoppers drop out.</strong> <span class="bracket">[A funnel is the buying journey: visit → product page → cart → checkout → payment. The engine divides the number reaching the next stage by the number at the previous stage, then compares those rates with configured bands.]</span></li>
+<li><strong>Separates a shop problem from a product problem.</strong> <span class="bracket">[Healthy add-to-cart activity followed by poor checkout progression can point to the shop. Weak product interest, poor economics or high refunds suggest different fixes. The pattern matters more than a single low sales number.]</span></li>
+<li><strong>Checks stock before condemning the product.</strong> <span class="bracket">[If customers could not buy it, weak observed sales can be a supply problem. That evidence can block an unfair stop recommendation.]</span></li>
+<li><strong>Includes classified customer reviews.</strong> <span class="bracket">[DistilBERT reads review text and gives a positive or negative label. The engine counts those labels and combines them with the other available evidence. A negative label is a signal to investigate, not proof of one specific defect.]</span></li>
+<li><strong>Recommends a next action.</strong> <span class="bracket">[Grow sales, repair the shop, change the price, replace advertising content, gather more evidence, or stop backing the product. A KILL recommendation means stop; it always waits for human approval.]</span></li>
+</ul>
+<div class="example"><div class="label">TWO DEMO CASES</div><p><strong>Halden Mug Set → FIX_SITE.</strong> <span class="bracket">[The seeded funnel indicates a shop-side problem, so the remedy is to fix the buying experience.]</span></p><p><strong>Medusa Sweatpants → KILL recommendation.</strong> <span class="bracket">[The review classifier marked 10 of 12 stored demo-shop reviews negative. The engine uses this as adverse product evidence; stopping the product still requires approval.]</span></p></div>
+<h3>Which AI does it use, and why?</h3>
+<ul>
+<li><strong>DistilBERT handles review language.</strong> <span class="bracket">[It is a pretrained sentiment model: it has already learned language patterns from earlier training, so we use it to label text rather than training a new language model from scratch. Seventy stored demo reviews have been classified.]</span></li>
+<li><strong>Hugging Face supplies the model and loading tools.</strong> <span class="bracket">[Hugging Face is a model hub and software ecosystem. The Transformers library loads DistilBERT; Hugging Face itself is not a fourth business agent.]</span></li>
+<li><strong>A separate language-model layer can investigate and choose a permitted verdict.</strong> <span class="bracket">[It can read evidence tools and select an allowed judgment. Exposure checks, stock constraints and human approval are enforced by code, rather than trusting the model to remember them.]</span></li>
+</ul>
+<div class="say"><span>SAY THIS</span><p>“I chose product diagnosis as the third agent because it determines what the other two should support. A broken checkout needs a repair; missing stock needs supply; persistent customer dissatisfaction needs a product decision.”</p></div>
+</section>
+
+<section class="section" id="boundaries">
+<h2>How the three agents stay connected</h2>
+<ul>
+<li><strong>They read shared facts, then propose actions.</strong> <span class="bracket">[The adapter imports shop data. The database stores evidence. The queue stores work so it can survive a process failure. An agent’s proposal is a structured request, such as “order this quantity” or “set this budget.”]</span></li>
+<li><strong>The gate decides whether a proposal may proceed.</strong> <span class="bracket">[It checks action ownership, money, size and policy constraints. Small permitted actions may pass automatically; larger actions need a checker or a person. The model cannot select its own approval tier.]</span></li>
+<li><strong>The executor performs approved shop changes.</strong> <span class="bracket">[The ledger records the decision; the outbox carries its event; the executor consumes the event and performs the connected action. An authorized event is not itself proof that the external change completed.]</span></li>
+</ul>
+<div class="status"><h3>Describe the current prototype accurately</h3><ul>
+<li>The storefront is a functioning local Medusa shop. The towel and advertising examples are seeded or simulated.</li>
+<li>Ridge and DistilBERT demonstrate numerical estimation and text classification. The current small tool-using language model has failed required-read checks during testing, so those investigations used the rules fallback.</li>
+<li>No real advertising account is connected. The reorder executor simulates an immediate stock receipt rather than a supplier purchasing and delivery process.</li>
+<li>MiniLM is an optional model for matching substitute products; no learned substitute links are currently stored. Configured product groups provide the fallback. Chronos is an experimental forecasting option, not active in the current decisions.</li>
+</ul></div>
+<div class="links"><a href="/flow">Walk through the recorded decisions →</a><a href="/map">See the connected agent map →</a><a href="/">Open the shop →</a></div>
+</section>
+</main></body></html>

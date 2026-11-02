@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scaling to a Million</title>
+<meta name="description" content="A four-phase plan to take an autonomous sunglasses brand from a low-cost product test to one million customers in 24 months, priced line by line from official price lists.">
+<link rel="stylesheet" href="assets/style.css?v=20261025c">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js?v=20261025c"></script>
+<style>
+  /* ---------- time machine ---------- */
+  .tm { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); margin: 0 0 28px; overflow: clip; }
+  .tm-top { position: sticky; top: 58px; z-index: 5; border-radius: 18px 18px 0 0; background: color-mix(in srgb, var(--bg-elev) 94%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 14px 18px 12px; }
+  .tm-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .tm-when { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+  #tm-month { font-family: var(--display); font-size: 26px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  #tm-phase { font-size: 13px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 3px 10px; border-radius: 99px; }
+  .tm-btn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
+  .tm-btn svg { width: 14px; height: 14px; }
+  .tm-phs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tm-ph { height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg-muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .tm-ph.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .tm-scrub { position: relative; margin-top: 12px; }
+  #tm-range { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; cursor: pointer; margin: 0; }
+  #tm-range::-webkit-slider-runnable-track { height: 8px; border-radius: 99px; background: linear-gradient(90deg, var(--accent) var(--pct, 0%), var(--bg-sunk) var(--pct, 0%)); }
+  #tm-range::-moz-range-track { height: 8px; border-radius: 99px; background: var(--bg-sunk); }
+  #tm-range::-moz-range-progress { height: 8px; border-radius: 99px; background: var(--accent); }
+  #tm-range::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -7px; border-radius: 50%; background: var(--bg-elev); border: 3px solid var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+  #tm-range::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--bg-elev); border: 3px solid var(--accent); }
+  #tm-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
+  .tm-ticks { display: grid; grid-template-columns: 4fr 5fr 7fr 8fr; font-size: 11px; color: var(--fg-faint); font-family: var(--mono); margin-top: 2px; }
+  .tm-ticks span { border-left: 1px solid var(--border-strong); padding-left: 6px; }
+
+  .tm-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
+  .tm-kpi { padding: 12px 16px; border-right: 1px solid var(--border); min-width: 0; }
+  .tm-kpi:nth-child(6n) { border-right: 0; }
+  .tm-kpi:nth-child(n+7) { border-top: 1px solid var(--border); }
+  .tm-kpi .v { font-family: var(--display); font-size: 21px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tm-kpi .l { font-size: 11.5px; color: var(--fg-faint); }
+  .tm-kpi.hl .v { color: var(--accent); }
+
+  .tm-body { display: block; }
+  .tm-lanes { padding: 8px 16px 16px; display: grid; gap: 4px; min-width: 0; }
+  .tm-lane { padding-top: 10px; }
+  .tm-lane-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 12px; font-weight: 650; color: var(--fg-muted); margin: 0 0 6px; }
+  .tm-lane-h em { font-style: normal; font-weight: 500; color: var(--fg-faint); }
+  .tm-lane-h b { font-family: var(--mono); font-size: 12px; color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tm-lane.variable .tm-lane-h b { color: var(--flax); }
+  .tm-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); gap: 8px; }
+  .tm-tile { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-auto-rows: auto; align-content: start; column-gap: 10px; padding: 10px 11px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-elev); min-width: 0; transition: opacity .3s, border-color .3s, background .3s; }
+  .tm-tile .ic { grid-column: 1; grid-row: 1 / span 3; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+  .tm-lane.variable .tm-tile .ic { background: var(--flax-soft); color: var(--flax); }
+  .tm-tile .ic svg { width: 19px; height: 19px; }
+  .tm-tile .tt { font-size: 12.5px; font-weight: 650; line-height: 1.3; padding-right: 54px; }
+  .tm-tile .tt i { font-style: normal; font-size: 10px; font-weight: 600; color: var(--fg-faint); }
+  .tm-tile .pv { font-size: 12px; color: var(--fg-muted); line-height: 1.35; margin-top: 2px; }
+  .tm-tile .pr { font-family: var(--mono); font-size: 12.5px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tm-tile .pr.var { color: var(--fg-faint); font-weight: 500; }
+  .tm-tile .bd { position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 99px; }
+  .tm-tile .bd.new { background: var(--ok-soft); color: var(--ok); }
+  .tm-tile .bd.up { background: var(--accent-soft); color: var(--accent); }
+  .tm-tile.off { opacity: .42; border-style: dashed; background: transparent; }
+  .tm-tile.off .ic { background: var(--bg-sunk); color: var(--fg-faint); }
+  .tm-tile.pop { animation: pop .6s cubic-bezier(.2,.9,.3,1.3); }
+  .tm-tile.swap { animation: swap .6s ease; }
+  .tm-tile .pr.up { animation: up .7s ease; }
+  @keyframes pop { 0% { transform: scale(.82); opacity: .2; box-shadow: 0 0 0 0 var(--ok); } 60% { transform: scale(1.04); opacity: 1; box-shadow: 0 0 0 6px color-mix(in srgb, var(--ok) 25%, transparent); } 100% { transform: none; box-shadow: none; } }
+  @keyframes swap { 0% { transform: rotateX(0); } 45% { transform: rotateX(80deg); border-color: var(--accent); } 100% { transform: rotateX(0); border-color: var(--accent); } }
+  @keyframes up { 0% { color: var(--flax); transform: translateY(-3px); } 100% { color: inherit; transform: none; } }
+
+  .tm-side { border-bottom: 1px solid var(--border); padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .8fr) minmax(0, 1.4fr); gap: 18px; align-content: start; background: var(--bg-sunk); }
+  .tm-side h4 { margin: 0 0 8px; font-size: 12px; color: var(--fg-muted); }
+  .tm-foot { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip-f { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; padding: 4px 10px 4px 8px; border-radius: 99px; border: 1px dashed var(--border-strong); color: var(--fg-faint); }
+  .chip-f i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+  .chip-f.on { border-style: solid; border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); color: var(--fg); background: var(--bg-elev); }
+  .chip-f.on i { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .chip-f.warm { border-style: solid; color: var(--fg-muted); background: var(--bg-elev); }
+  .chip-f.warm i { background: var(--warn); }
+  .tm-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .tm-log li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 2px 8px; font-size: 12.5px; color: var(--fg-muted); padding: 8px 10px; border-radius: 10px; background: var(--bg-elev); border: 1px solid var(--border); margin: 0; }
+  .tm-log li b { color: var(--fg); font-size: 12.5px; }
+  .tm-log li span:last-child { grid-column: 2; }
+  .tm-log .when { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); grid-row: 1 / span 2; padding-top: 1px; }
+  .tm-log li.now { border-color: var(--accent); animation: pop .5s ease; }
+  .tm-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tm-mini div { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+  .tm-mini b { display: block; font-family: var(--display); font-size: 17px; }
+  .tm-mini span { font-size: 11px; color: var(--fg-faint); }
+
+  .tm-chartbox { position: relative; border-bottom: 1px solid var(--border); padding: 14px 16px 10px; }
+  .tm-chartbox h4 { margin: 0 0 2px; font-size: 13px; }
+  .tm-chartbox p { margin: 0 0 6px; font-size: 12px; color: var(--fg-faint); }
+  #tm-chart { width: 100%; height: auto; display: block; }
+  #tm-chart .band { fill: var(--bg-sunk); opacity: .55; }
+  #tm-chart .band.alt { opacity: .25; }
+  #tm-chart .bandl { font-size: 11px; fill: var(--fg-muted); font-weight: 600; }
+  #tm-chart .grid { stroke: var(--border); stroke-width: 1; }
+  #tm-chart .ax { font-size: 10.5px; fill: var(--fg-faint); font-family: var(--mono); }
+  #tm-chart .lab { font-size: 11px; fill: var(--fg-muted); font-weight: 600; }
+  #tm-chart .bar { fill: var(--accent); opacity: .45; transition: opacity .2s; }
+  #tm-chart .bar.sel { opacity: 1; }
+  #tm-chart .feeline { fill: none; stroke: var(--flax); stroke-width: 2; stroke-dasharray: 5 4; }
+  #tm-chart .hit { fill: transparent; cursor: pointer; }
+  #tm-chart .playhead { stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 3 3; }
+  .tm-tip { position: absolute; transform: translate(-50%, -100%); pointer-events: none; background: var(--fg); color: var(--bg-elev); font-size: 12px; line-height: 1.4; padding: 8px 10px; border-radius: 8px; display: grid; gap: 1px; white-space: nowrap; z-index: 3; }
+  .tm-tip b { font-weight: 650; }
+  .tm-tip[hidden] { display: none; }
+  .tm-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .tm-legend i { display: inline-block; vertical-align: middle; margin-right: 6px; }
+  .lg-bar { width: 10px; height: 10px; border-radius: 3px; background: var(--accent); }
+  .lg-line { width: 18px; height: 0; border-top: 2px dashed var(--flax); }
+
+  .tm-kpi.muted .v { color: var(--fg-faint); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .tm-kpi:nth-child(5) .v { color: var(--accent); }
+  .tm-tabbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 16px 0; }
+  .tm-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tm-tab { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg-muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .tm-tab b { font-family: var(--mono); font-size: 11.5px; color: var(--fg); font-variant-numeric: tabular-nums; }
+  .tm-tab i { font-style: normal; font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-soft); padding: 1px 6px; border-radius: 99px; }
+  .tm-tab[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .tm-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--fg-muted); cursor: pointer; }
+  .tm-switch input { width: 16px; height: 16px; accent-color: var(--accent); }
+  .tm-lane.teamlane .tm-tile .ic { background: var(--ok-soft); color: var(--ok); }
+  tr.bkt td { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .tm-mini { grid-template-columns: 1fr 1fr; }
+  /* ---------- page pieces ---------- */
+  .phase-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 22px; }
+  .pc4 { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px 16px; min-width: 0; }
+  .pc4 .k { font-family: var(--mono); font-size: 11px; color: var(--flax); }
+  .pc4 h4 { margin: 2px 0 6px; font-size: 17px; }
+  .pc4 dl { margin: 0; display: grid; gap: 4px; font-size: 13px; }
+  .pc4 dt { color: var(--fg-faint); font-size: 11.5px; margin-top: 4px; }
+  .pc4 dd { margin: 0; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.grp td { background: var(--bg-sunk); font-weight: 650; }
+  tr.tot td { font-weight: 700; border-top: 2px solid var(--border-strong); }
+  tr.tot.alt td { color: var(--flax); border-top: 1px solid var(--border); }
+  #ai-table small { display: block; color: var(--fg-faint); font-size: 12px; }
+  .bom-tabs, .ai-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 12px; }
+  .bom-tab { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg-muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .bom-tab[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .ai-tools select { height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg); font: inherit; font-size: 13px; padding: 0 8px; }
+  .ai-tools .pill { font-size: 12.5px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 4px 10px; border-radius: 99px; }
+  .rules { counter-reset: r; list-style: none; padding: 0; margin: 0 0 20px; display: grid; gap: 10px; }
+  .rules li { counter-increment: r; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; margin: 0; }
+  .rules li::before { content: counter(r); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+  .rules b { display: block; font-family: var(--display); }
+  .rules span { color: var(--fg-muted); font-size: 14.5px; }
+
+  @media (max-width: 1100px) { .tm-side { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .tm-side > div:last-child { grid-column: 1 / -1; } .phase-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 760px) { .tm-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tm-kpi:nth-child(n) { border-right: 1px solid var(--border); border-top: 1px solid var(--border); } .tm-kpi:nth-child(2n) { border-right: 0; } .tm-top { position: static; } .phase-cards { grid-template-columns: minmax(0, 1fr); } .tm-ticks { font-size: 10px; } .tm-side { grid-template-columns: minmax(0, 1fr); } }
+  @media (prefers-reduced-motion: reduce) { .tm-tile.pop, .tm-tile.swap, .tm-log li.now, .tm-tile .pr.up { animation: none; } }
+
+  .tm-tile[hidden], #in-own-wrap[hidden] { display: none !important; }
+  .in-row.two { grid-template-columns: 1fr 1fr; }
+  .in-choice { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+  .in-hint { grid-column: 1 / -1; margin: 0; font-size: 12.5px; color: var(--fg-muted); }
+  #cmp-table tr.cur td { background: var(--accent-soft); }
+  .presenter-link { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 18px; font-size: 13.5px; color: var(--fg-muted); }
+  .presenter-link .tm-btn { text-decoration: none; }
+  /* inputs + tile extras */
+  .tm-in { border-bottom: 1px solid var(--border); background: var(--bg-sunk); }
+  .tm-in > summary { cursor: pointer; padding: 10px 16px; font-weight: 650; font-size: 13.5px; list-style: none; }
+  .tm-in > summary::-webkit-details-marker { display: none; }
+  .tm-in > summary::before { content: "▸ "; color: var(--accent); }
+  .tm-in[open] > summary::before { content: "▾ "; }
+  .tm-in > summary span { font-weight: 400; color: var(--fg-faint); font-size: 12.5px; margin-left: 6px; }
+  #tm-inputs { padding: 0 16px 14px; }
+  .in-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; }
+  .in-grid label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--fg-muted); }
+  .in-grid input[type=number], .in-grid select { height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg); font: inherit; font-size: 13.5px; padding: 0 8px; width: 100%; min-width: 0; }
+  .in-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .in-row input { padding: 0 4px !important; text-align: center; }
+  label.chk { display: inline-flex !important; grid-auto-flow: column; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--fg-muted); cursor: pointer; }
+  label.chk input { width: 15px; height: 15px; accent-color: var(--accent); }
+  .in-opts { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 12px; font-size: 12.5px; }
+  .in-opts > span { font-weight: 650; color: var(--fg-muted); }
+  .tm-tile .un { font-size: 11px; color: var(--fg-faint); line-height: 1.35; margin-top: 3px; font-family: var(--mono); }
+  .tm-tile .tt, .tm-tile .pv, .tm-tile .un, .tm-tile .pr, .tm-tile .src { grid-column: 2; min-width: 0; }
+  .tm-tile .src { display: block; margin-top: 4px; font-size: 11px; font-weight: 600; line-height: 1.5; }
+  .tm-tile.optoff { opacity: .55; border-style: dashed; }
+  .tm-lane.lane-opt .tm-tile .ic { background: var(--info-soft); color: var(--info); }
+  .tm-lane.lane-pay .tm-tile .ic { background: var(--flax-soft); color: var(--flax); }
+  .tm-lane.lane-team .tm-tile .ic { background: var(--ok-soft); color: var(--ok); }
+  #bom-box small { color: var(--fg-faint); font-size: 11.5px; }
+  .ev-dlg { border: 1px solid var(--border); border-radius: 16px; background: var(--bg-elev); color: var(--fg); width: min(860px, calc(100vw - 32px)); padding: 18px 20px; box-shadow: var(--shadow-lift); }
+  .ev-dlg::backdrop { background: rgba(10, 12, 25, .55); }
+  .ev-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 12px; }
+  .ev-head h3 { margin: 2px 0 0; font-size: 18px; }
+  .ev-k { font-size: 12px; font-weight: 600; color: var(--accent); }
+  .ev-dlg td small { display: block; color: var(--fg-faint); font-size: 11.5px; }
+  .ev-meta { font-size: 12.5px; color: var(--fg-muted); margin: 10px 0 0; }
+  @media (max-width: 900px) { .in-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Next level · Scale plan</div>
+<h1>Sunglasses to a million customers, priced line by line</h1>
+<p class="lede">The same autonomous company, now selling sunglasses as Halden Eyewear: a low-cost product test that grows over four phases to one million customers in 24 months. Every price comes from the vendor's official price list, every quantity is shown next to it, and the inputs that are business decisions (team size, salaries, order value) are yours to set.</p>
+<p class="presenter-link"><a class="tm-btn" href="scale-brief.html" target="_blank" rel="noopener">Open presenter view ↗</a> <span>One card per phase: components and monthly cost in short bullets, for showing while you explain.</span></p>
+
+<section class="tm" aria-label="Scale time machine">
+  <div class="tm-top">
+    <div class="tm-row">
+      <div class="tm-when"><span id="tm-month">Month 1</span><span id="tm-phase">Phase 1 · Test</span></div>
+      <div class="tm-phs">
+        <button class="tm-ph" data-p="1" type="button">1 · Test</button>
+        <button class="tm-ph" data-p="2" type="button">2 · Traction</button>
+        <button class="tm-ph" data-p="3" type="button">3 · Scale</button>
+        <button class="tm-ph" data-p="4" type="button">4 · Million</button>
+      </div>
+      <button class="tm-btn" id="tm-playbtn" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg><span>Play</span></button>
+    </div>
+    <div class="tm-scrub">
+      <input id="tm-range" type="range" min="1" max="24" step="1" value="1" aria-label="Month, 1 to 24">
+      <div class="tm-ticks"><span>Months 1–4</span><span>5–9</span><span>10–16</span><span>17–24</span></div>
+    </div>
+  </div>
+
+  <details class="tm-in" open><summary>Your inputs <span>change any of these and every number on the page recalculates</span></summary><div id="tm-inputs"></div></details>
+
+  <div class="tm-kpis">
+    <div class="tm-kpi"><div class="v" id="k-cust">0</div><div class="l">customers (cumulative)</div></div>
+    <div class="tm-kpi"><div class="v" id="k-opd">0</div><div class="l">orders per day</div></div>
+    <div class="tm-kpi"><div class="v" id="k-pk">0</div><div class="l">orders/sec, peak hour</div></div>
+    <div class="tm-kpi"><div class="v" id="k-sales">£0</div><div class="l">sales per month</div></div>
+    <div class="tm-kpi hl"><div class="v" id="k-all">£0</div><div class="l">all-in cost / month</div></div>
+    <div class="tm-kpi"><div class="v" id="k-pct">0%</div><div class="l">all-in as % of sales · <span id="k-pct-tech"></span></div></div>
+    <div class="tm-kpi"><div class="v" id="k-run">£0</div><div class="l">runtime platform</div></div>
+    <div class="tm-kpi"><div class="v" id="k-eng">£0</div><div class="l">engineering & workplace</div></div>
+    <div class="tm-kpi"><div class="v" id="k-opt">£0</div><div class="l">optional add-ons</div></div>
+    <div class="tm-kpi"><div class="v" id="k-team">£0</div><div class="l">developers (your input)</div></div>
+    <div class="tm-kpi"><div class="v" id="k-fees">£0</div><div class="l">payment fees</div></div>
+    <div class="tm-kpi"><div class="v" id="k-llm">£0</div><div class="l">LLM · <span id="k-tok">0</span></div></div>
+  </div>
+
+  <div class="tm-chartbox">
+    <h4>All-in cost vs payment fees, month by month</h4>
+    <p class="tm-legend"><span><i class="lg-bar"></i>All-in cost (runtime + engineering + add-ons + developers if included)</span><span><i class="lg-line"></i>Card and PayPal fees</span><span>Log scale · hover for detail · click to jump</span></p>
+    <svg id="tm-chart" viewBox="0 0 720 230" role="img" aria-label="Monthly all-in cost and payment fees over 24 months"></svg>
+    <div class="tm-tip" id="tm-tip" hidden></div>
+  </div>
+
+  <div class="tm-body">
+    <aside class="tm-side">
+      <div><h4>Footprint</h4><div class="tm-foot" id="tm-foot"></div></div>
+      <div><h4>Autonomy this phase</h4><div class="tm-mini"><div><b id="k-agents">11</b><span>agents live</span></div><div><b id="k-touch">&lt; 50</b><span>human touches / 1k decisions</span></div><div><b id="k-t0">£1k</b><span>largest PO without review</span></div><div><b>T3</b><span>new supplier, bank change</span></div></div></div>
+      <div><h4>What just happened</h4><ul class="tm-log" id="tm-log"></ul></div>
+    </aside>
+    <div class="tm-tabbar"><div class="tm-tabs" id="tm-tabs" role="group" aria-label="Cost buckets"></div></div>
+    <div class="tm-lanes" id="tm-lanes"></div>
+  </div>
+</section>
+
+<div class="tldr">
+  <span class="t">The answer in five lines (live, from your inputs)</span>
+  <ul>
+    <li><b>Four phases, moved by signals, not dates:</b> Test (months 1–4), Traction (5–9), Scale (10–16), Million (17–24). Each starts when the previous phase's exit gate is met.</li>
+    <li><b>Technology cost per month</b> (runtime platform + engineering tools): <span data-k="tech1"></span> in the test, <span data-k="tech2"></span> in traction, <span data-k="tech3"></span> at scale, <span data-k="tech4"></span> at a million customers. Over 24 months that is <span data-k="tech24"></span>, <span data-k="techPct24"></span> of sales. Developers are your input: <span data-k="devs"></span> per phase at <span data-k="devCost"></span> a month gives <span data-k="all24"></span> all-in (<span data-k="allPct24"></span> of sales).</li>
+    <li><b>A million customers is not a heavy-traffic problem:</b> about <span data-k="opdM24"></span> orders a day and <span data-k="pkM24"></span> orders per second at the busiest hour. Shopify serves the shoppers; our platform handles events, agents and money.</li>
+    <li><b>Where the money goes at month 24:</b> card and PayPal fees are <span data-k="feesM24"></span> a month (<span data-k="feesPctM24"></span> of sales). The whole runtime platform is <span data-k="runM24"></span>. LLM tokens are <span data-k="llmM24"></span> for <span data-k="tokM24"></span> tokens.</li>
+    <li><b>Grow by changing tiers, not rewriting:</b> the Action Gateway, Postgres ledger, event contract, Temporal workflows, MCP tools and CI with eval gates exist from day one. Everything else is a tier change on the same service.</li>
+  </ul>
+</div>
+
+<h2 id="method">How the numbers are built</h2>
+<div class="grid g2">
+  <div class="card"><h4>Rules</h4><ul>
+    <li><b>Prices only from official sources.</b> Every line links to the vendor's own pricing page. Azure lines also link to Microsoft's Retail Prices API filtered to the exact UK South meter, so the number can be checked in one click. Retrieved 17 October 2026.</li>
+    <li><b>Currency: GBP.</b> Vendors that price in USD are converted at 0.755, the ratio Microsoft itself uses in its GBP price list for the same Azure meters.</li>
+    <li><b>Quantities are sizing decisions,</b> shown next to every price: how many servers, which tier, how many GB. They follow from the order volume, not from guesswork about totals.</li>
+    <li><b>Business decisions are inputs:</b> number of developers, their cost, order value, Claude Code plan, prompt size and which optional add-ons to buy.</li>
+  </ul></div>
+  <div class="card"><h4>Only what production needs</h4><ul>
+    <li>Production, staging and PR-preview environments; backups; secrets; logs; feature flags and kill switches; CI; source control; the tools engineers use every day.</li>
+    <li>Things we could build or get free are not bought: customer chat is Shopify Inbox answered by our agent; supplier PDFs are read by Claude directly; policies are searched with pgvector in the ledger; forecasting runs as a container job.</li>
+    <li>Anything without a published price (enterprise quotes, agencies, insurance, audits) is listed in <a href="#excluded">What is not in the totals</a> rather than guessed.</li>
+  </ul></div>
+</div>
+<div class="table-wrap"><table>
+<thead><tr><th>Volume assumption</th><th>Value</th><th>Drives</th></tr></thead>
+<tbody>
+<tr><td>Customers by month 24</td><td><span data-k="cust24"></span> (input), on an S-shaped growth curve</td><td>Orders, emails, tickets, everything downstream</td></tr>
+<tr><td>Average order value</td><td><span data-k="aov"></span> (input). Set it to your planned price point; sunglasses range from budget to premium</td><td>Sales and payment fees only; technology cost depends on order count, not order value</td></tr>
+<tr><td>Repeat purchases</td><td>2.5% of existing customers reorder each month</td><td>Orders per month</td></tr>
+<tr><td>Support messages</td><td>0.12 per order</td><td>AI care-agent tokens, logs</td></tr>
+<tr><td>Peak</td><td>Peak day = 4× an average day; 12% of a peak day in its busiest hour</td><td>Capacity headroom</td></tr>
+</tbody></table></div>
+
+<h2 id="phases">The four phases at a glance</h2>
+<div class="phase-cards">
+  <div class="pc4"><span class="k">Months 1–4</span><h4>1 · Test</h4><dl>
+    <dt>Goal</dt><dd>Find the winning frames out of 24 without buying stock for losers</dd>
+    <dt>Technology / month</dt><dd><span data-k="tech1"></span></dd>
+    <dt>Developers / month</dt><dd><span data-k="team1"></span></dd>
+    <dt>Shape</dt><dd>One region, apps that scale to zero, one small Postgres, ~11 agents</dd>
+    <dt>Exit gate</dt><dd>3+ proven models; 50+ orders/day for 14 days</dd></dl></div>
+  <div class="pc4"><span class="k">Months 5–9</span><h4>2 · Traction</h4><dl>
+    <dt>Goal</dt><dd>Make repeatable growth reliable</dd>
+    <dt>Technology / month</dt><dd><span data-k="tech2"></span></dd>
+    <dt>Developers / month</dt><dd><span data-k="team2"></span></dd>
+    <dt>Shape</dt><dd>HA database, Redis, Front Door, gateway ×2, ~19 agents</dd>
+    <dt>Exit gate</dt><dd>500 orders/day; database p95 CPU above 60% at peaks</dd></dl></div>
+  <div class="pc4"><span class="k">Months 10–16</span><h4>3 · Scale</h4><dl>
+    <dt>Goal</dt><dd>US and EU customers, industrial reliability</dd>
+    <dt>Technology / month</dt><dd><span data-k="tech3"></span></dd>
+    <dt>Developers / month</dt><dd><span data-k="team3"></span></dd>
+    <dt>Shape</dt><dd>Dedicated nodes across zones, DR replica, container security, ~29 agents</dd>
+    <dt>Exit gate</dt><dd>2,000 orders/day; 10× load test passed</dd></dl></div>
+  <div class="pc4"><span class="k">Months 17–24</span><h4>4 · Million</h4><dl>
+    <dt>Goal</dt><dd>One million customers across UK, EU and US</dd>
+    <dt>Technology / month</dt><dd><span data-k="tech4"></span></dd>
+    <dt>Developers / month</dt><dd><span data-k="team4"></span></dd>
+    <dt>Shape</dt><dd>3 servers + D4 database with a DR copy by default; a second region is optional (switch in inputs), ~33 agents</dd>
+    <dt>Steady state</dt><dd>&lt; 5 human touches per 1,000 decisions</dd></dl></div>
+</div>
+
+<h2 id="p1">Phase 1 · Test (months 1–4)</h2>
+<p><b>Goal:</b> learn which frames sell before committing money to stock. 24 candidate models go live as pre-orders with honest ship dates; a bandit moves ad spend to the ones that convert; only winners get small air-freighted batches. In month 1 technology costs <span data-k="m1tech"></span> against <span data-k="m1sales"></span> of sales (<span data-k="m1techpct"></span>). With your developer inputs the all-in figure is <span data-k="m1all"></span> (<span data-k="m1pct"></span> of sales), which falls quickly because almost all of it is fixed.</p>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  CU(["Shoppers"]) --> SH["Shopify + Shopify Payments<br/>Inbox chat · Shopify Email"]
+  SH -- "webhooks" --> APP
+  subgraph AZ["Azure UK South · Container Apps consumption plan"]
+    APP["Gateway + adapters (1 replica)<br/>11 agents scale from zero<br/>MCP tools in-process"]
+    PG[("Postgres B1ms<br/>Ops Ledger + outbox + pgvector")]
+    KV["Key Vault"]
+    CFG["App Configuration<br/>kill switches"]
+  end
+  APP <--> PG
+  PG -- "outbox" --> SB["Service Bus Standard"] --> APP
+  APP <--> TMP["Temporal Cloud<br/>pay-as-you-go"]
+  APP <--> LLM["Claude on Microsoft Foundry<br/>Haiku · Sonnet · Opus 5.5"]
+  APP --> EXT(["UK 3PL · factories by email · Xero · ad platforms"])
+  OWN(["Owners · approve above T1"]) -.-> APP
+</script>
+</div>
+<p class="caption">Figure S.1: One region, one small database, apps that cost nothing when idle. The Action Gateway is a module, but it already enforces limits, idempotency and the audit log.</p>
+<div class="grid g2">
+  <div class="card"><h4>What runs, and why it is enough</h4><ul>
+    <li>Container Apps consumption plan: one always-on gateway replica (billed at the idle rate most of the time), agents and jobs that scale from zero. The monthly free grant covers most of it.</li>
+    <li>Postgres Flexible Server B1ms: ~10–85 orders a day is a tiny load. No HA yet (Burstable doesn't offer it); point-in-time restore covers mistakes. If Postgres is down, Shopify keeps selling.</li>
+    <li>Service Bus Standard, Key Vault, App Configuration free tier, Log Analytics within its free 5 GB.</li>
+    <li>Staging + PR previews: scale-to-zero apps and a second B1ms with seeded data.</li>
+    <li>Shopify plan is chosen automatically: the cheapest plan once card fees are counted.</li>
+  </ul></div>
+  <div class="card"><h4>Agents, limits, gate</h4><ul>
+    <li><b>11 agents:</b> Product Test, Creative + Brand Guardian, Budget Allocator (bandit), Order Orchestrator, Procurement (small), Supplier Liaison (email), Compliance, Care Triage + Resolution, Reconciliation, Sentinel.</li>
+    <li><b>Limits:</b> a £1k PO, a £30 refund, a ±5% price move and a capped daily ad budget per model go through on their own. Anything bigger asks an owner.</li>
+    <li><b>Exit gate:</b> 3+ models above 2% conversion with positive first-order margin after acquisition cost; 50+ orders/day for 14 days; one factory delivered two batches on time.</li>
+  </ul></div>
+</div>
+
+<h2 id="p2">Phase 2 · Traction (months 5–9)</h2>
+<p><b>Goal:</b> make growth reliable. The database gets a high-availability standby, the gateway runs two replicas, Redis takes the spend counters, and Front Door fronts our APIs and owner console.</p>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  SH["Shopify · plan chosen by cost"] -- "webhooks" --> FD["Front Door Standard"] --> AD
+  subgraph AZ["Azure UK South · zone-redundant"]
+    AD["Adapters (always on)"] --> SB["Service Bus Standard"]
+    SB --> AG["Agent workers · 19 agents<br/>scale from zero"]
+    AG -- "proposals" --> GW["Action Gateway ×2<br/>own identity"]
+    GW --> AD
+    GW <--> RD[("Azure Managed Redis B1<br/>spend counters, locks")]
+    GW --> PG[("Postgres D2ds_v5 + HA standby")]
+    PG -- "outbox" --> SB
+    JOB["Nightly forecast job"] --> PG
+  end
+  AG <--> LLM["Claude on Foundry"]
+  AG <--> TMP["Temporal Cloud"]
+</script>
+</div>
+<p class="caption">Figure S.2: The same code, split along existing module boundaries. The gateway is the only identity that can reach payment and supplier credentials.</p>
+<div class="grid g2">
+  <div class="card"><h4>What changes</h4><ul>
+    <li>Postgres B1ms → D2ds_v5 with a zone-redundant HA standby (billed as a second server).</li>
+    <li>Azure Managed Redis B1 for exact spend limits under concurrency.</li>
+    <li>Front Door Standard with custom WAF rules in front of webhooks, the owner console and the supplier portal.</li>
+    <li>App Configuration Standard for feature flags and kill switches with change history.</li>
+  </ul></div>
+  <div class="card"><h4>Agents, limits, gate</h4><ul>
+    <li><b>+8 agents (19):</b> Forecasting, Replenishment Planner, Inventory Position, Pricing + Price Guard, Promotion Planner, Lifecycle, Returns, Accounts Payable, plus the Buy Panel.</li>
+    <li><b>Limits:</b> PO £4k, refund £60, price ±10%.</li>
+    <li><b>Exit gate:</b> 500 orders/day; database p95 CPU above 60% at peaks; non-UK cards above 15% of orders.</li>
+  </ul></div>
+</div>
+
+<h2 id="p3">Phase 3 · Scale (months 10–16)</h2>
+<p><b>Goal:</b> industrial reliability. Workloads move to dedicated nodes spread across availability zones, the ledger gets a disaster-recovery replica in a second UK region, and container security scanning switches on.</p>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  SH["Shopify · UK + Markets"] --> FD["Front Door"]
+  FD --> AD
+  subgraph UK["Azure UK South"]
+    AD["Adapters"] --> SB["Service Bus Standard"]
+    SB --> AG["Agent workers · 29 agents<br/>3 dedicated D4 nodes"]
+    AG --> GW["Action Gateway"]
+    GW --> PG[("Postgres D4ds_v5 + HA")]
+    DEF["Defender for Containers"]
+  end
+  subgraph UKW["Azure UK West"]
+    DR[("DR replica · promotable")]
+  end
+  PG -.-> DR
+  AG <--> LLM["Claude on Foundry"]
+  AG <--> TMP["Temporal Cloud"]
+</script>
+</div>
+<p class="caption">Figure S.3: Larger tiers of the same services. Private networking, API Management and a lakehouse are optional add-ons you can switch on in the inputs.</p>
+<div class="grid g2">
+  <div class="card"><h4>What changes</h4><ul>
+    <li>Container Apps dedicated plan: 3 × D4 nodes (4 vCPU, 16 GiB) across zones, plus the plan management fee.</li>
+    <li>Postgres D4ds_v5 with HA, plus a DR replica in UK West.</li>
+    <li>Defender for Containers on all vCores; Container Registry Standard; Xero Comprehensive for multi-currency.</li>
+    <li>Nightly LightGBM + reconciliation job replaces statsforecast once the backtest says it wins.</li>
+  </ul></div>
+  <div class="card"><h4>Agents, limits, gate</h4><ul>
+    <li><b>+10 agents (29):</b> Demand Sensing, Node Allocation, Inbound Coordinator, Delivery Exception, Supplier Scorecard, Competitor Monitor, Growth Strategist, Cash &amp; Budget, Auditor, Incident Commander.</li>
+    <li><b>Limits:</b> PO £15k on its own, up to £45k with the panel; refund £120; price ±15%.</li>
+    <li><b>Exit gate:</b> 2,000 orders/day; a 10× peak load test passes; human touches under 10 per 1,000.</li>
+  </ul></div>
+</div>
+
+<h2 id="p4">Phase 4 · Million (months 17–24)</h2>
+<p><b>Goal:</b> one million customers across the UK, EU and US. By default this stays lean: three dedicated servers across availability zones and a 4-vCPU database with a standby and a disaster-recovery copy in UK West, because the load is under one order per second. A second region (US East) with its own runtime cell is an option in "Your inputs"; it adds resilience against a whole region failing, not speed.</p>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  SH["Shopify Plus · Markets"] --> FD["Front Door Premium<br/>managed WAF, 2 origins"]
+  FD --> C1
+  FD --> C2
+  subgraph R1["Azure UK South"]
+    C1["Cell UK + EU · 3 D4 nodes<br/>agents · gateway · adapters"]
+    PG[("Postgres D8ds_v5 + HA<br/>write primary")]
+  end
+  subgraph R2["Azure US East"]
+    C2["Cell US · 3 D4 nodes<br/>agents · gateway · adapters"]
+    PGR[("geo-replica<br/>promotable")]
+  end
+  C1 --> PG
+  C2 --> PG
+  PG -.-> PGR
+  C1 & C2 <--> LLM["Claude on Foundry"]
+  C1 & C2 <--> TMP["Temporal Cloud"]
+</script>
+</div>
+<p class="caption">Figure S.4: The optional two-region layout. The default is one region with a DR database copy. Either way there is one write primary: at under one order per second that is enough, and nothing a shopper waits on runs here.</p>
+<div class="grid g2">
+  <div class="card"><h4>What changes</h4><ul>
+    <li>Default: 3 dedicated D4 servers across zones and Postgres D4ds_v5 with HA standby + UK West DR copy (512 GB). Option: 2 regions, more servers, D8 database, more storage. Each is a switch in "Your inputs".</li>
+    <li>Front Door Premium for managed WAF rules and bot protection; Container Registry Premium with geo-replication.</li>
+    <li>Optional: Event Hubs for clickstream, Fabric for analytics, private networking for a stricter security posture.</li>
+  </ul></div>
+  <div class="card"><h4>Agents, limits</h4><ul>
+    <li><b>+4 agents (33):</b> Market Localisation, Marketplace, Wholesale (EDI), multi-entity Close &amp; Reporting.</li>
+    <li><b>Limits:</b> PO £40k on its own, up to £120k with the panel. Refunds stay at £120: refund risk grows with fraud, not with volume.</li>
+  </ul></div>
+</div>
+
+<h2 id="bill">Bill of materials by phase</h2>
+<p>Every resource, what we run, the official unit price, the monthly cost and a link to the source, at the end of each phase. Optional add-ons appear here only when switched on in the inputs.</p>
+<div class="bom-tabs">
+  <button class="bom-tab" data-p="1" type="button">Phase 1 · month 4</button>
+  <button class="bom-tab" data-p="2" type="button">Phase 2 · month 9</button>
+  <button class="bom-tab" data-p="3" type="button">Phase 3 · month 16</button>
+  <button class="bom-tab" data-p="4" type="button">Phase 4 · month 24</button>
+</div>
+<div class="table-wrap" id="bom-box"></div>
+
+<h2 id="ai">AI models: which agent uses which model, and what the tokens cost</h2>
+<p>All model calls go to Claude on Microsoft Foundry, which bills at Anthropic's published list prices. Small models do high-volume work; the frontier model is kept for decisions that move money. The table follows the time machine's month and your prompt-size input. It also counts the CI eval suite and the shadow runs that new agent versions do before they are allowed to act.</p>
+<div class="ai-tools"><span class="pill" id="ai-month">Month 1</span></div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Agent · task</th><th>Model</th><th class="num">Calls/mo</th><th class="num">Tokens in / out per call</th><th class="num">Cache hit</th><th class="num">Tokens/mo</th><th class="num">£/mo</th></tr></thead>
+  <tbody id="ai-table"></tbody>
+</table></div>
+<p id="ai-share" class="caption"></p>
+<div class="grid g3">
+  <div class="card"><h4>Claude Haiku 5.5</h4><p>$0.10 in / $0.50 out per million tokens, cache reads $0.01. Triage, extraction, reply QA, the Auditor's nightly sample (Batch API, half price).</p></div>
+  <div class="card"><h4>Claude Sonnet 5.5</h4><p>$2 in / $10 out, cache reads $0.10. Customer replies, verifiers, fraud grey zone, copy, creative, pricing rationale, CI evals.</p></div>
+  <div class="card"><h4>Claude Opus 5.5</h4><p>$4 in / $20 out, cache reads $0.20. Purchase orders, the Buy Panel and incidents: few calls where a wrong answer costs real money.</p></div>
+</div>
+
+<h2 id="buybuild">Buy vs build: compare the choices</h2>
+<p>Two choices change the cost picture: whether we use <b>Shopify</b> or build our own storefront, and whether bulk email goes through <b>Shopify Email</b> or <b>Amazon SES</b>. Switch them in "Your inputs" above; this table always shows all three scenarios with your other inputs. Your current choice is highlighted.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Scenario</th><th class="num">Tech, month 24</th><th class="num">Payment fees, month 24</th><th class="num">Developers, month 24</th><th class="num">Tech, 24 months</th><th class="num">Fees, 24 months</th><th class="num">Developers, 24 months</th><th class="num">Total, 24 months</th></tr></thead>
+<tbody id="cmp-table"></tbody></table></div>
+<div class="grid g2">
+  <div class="card"><h4>Why Shopify still wins</h4><ul>
+    <li>Building our own removes the Shopify plan (up to £1,800/month) but Stripe's published card rates are higher than Shopify Plus rates, and fraud screening (£0.04 per payment) and US sales tax (0.5%) are extra.</li>
+    <li>It also needs extra developers to build and run checkout, accounts, product pages, tax and fraud handling.</li>
+    <li>So at scale the "own storefront" scenario costs more, not less. It only makes sense for a shopping experience Shopify can't support.</li>
+  </ul></div>
+  <div class="card"><h4>Why SES from phase 3</h4><ul>
+    <li>Shopify Email is free up to 10,000 emails and needs no engineering, so it's the right start.</li>
+    <li>At millions of emails a month, Amazon SES at $0.10 per 1,000 is about a tenth of the price.</li>
+    <li>The switch costs one or two weeks to build templates, unsubscribe and bounce handling. Email sits behind an adapter, so agents don't change.</li>
+  </ul></div>
+</div>
+
+<h2 id="engineering">Engineering and delivery</h2>
+<p>"No humans in daily operations" doesn't mean no engineers. A small team builds and improves the machine; agents run it. These are the environments and tools that team needs, all of them in the bill of materials.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Environment</th><th>Purpose</th><th>Runs on</th></tr></thead>
+<tbody>
+<tr><td>Local + Claude Code</td><td>Writing code, prompts and tools; running the agent harness against recorded Shopify, 3PL and supplier responses</td><td>Laptops, Docker Postgres, Temporal dev server</td></tr>
+<tr><td>PR preview</td><td>A short-lived environment per pull request, deleted on merge; Shopify development store and payments in test mode</td><td>Container Apps, scale to zero</td></tr>
+<tr><td>Staging</td><td>Release candidate: smoke tests, synthetic orders end to end, shadow runs of new agent versions</td><td>Container Apps + its own Postgres</td></tr>
+<tr><td>Production</td><td>The business</td><td>Phase 1 one region · phase 3 + DR replica · phase 4 two cells</td></tr>
+</tbody></table></div>
+<div class="grid g2">
+  <div class="card"><h4>Pipeline</h4><ul>
+    <li>GitHub Team (protected branches on private repos), CODEOWNERS; two reviewers for gateway, policy and payment code.</li>
+    <li>Every PR in GitHub Actions: lint, unit tests, contract tests against recorded vendor responses, infrastructure plan (Bicep), and the agent eval suite for any changed prompt, tool or model route.</li>
+    <li>Images in Azure Container Registry; Container Apps revisions roll out as canaries with automatic rollback.</li>
+    <li>GitHub signs in to Azure with OIDC federation: no long-lived cloud keys in CI.</li>
+    <li>Expand-and-contract database migrations, so a rollback never needs a data fix.</li>
+  </ul></div>
+  <div class="card"><h4>Tools</h4><ul>
+    <li><b>Claude Code</b> for every developer (plan is an input); <b>Google Workspace</b> for email, docs and meetings; <b>Jira</b> free up to 10 users for planning and incidents.</li>
+    <li>Agent and service identities use Microsoft Entra ID managed identities, which are free; secrets live in Key Vault.</li>
+    <li>Feature flags and kill switches in App Configuration take effect without a deploy.</li>
+    <li>Azure set up with separate production and non-production subscriptions, budgets and cost alerts on each.</li>
+  </ul></div>
+</div>
+
+<h2 id="excluded">What is not in the totals, and why</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Item</th><th>Why it is excluded</th><th>When it matters</th></tr></thead>
+<tbody>
+<tr><td>Shopify Plus variable fee</td><td>Shopify publishes Plus as "from £1,800/month"; any volume-based fee is set in the contract</td><td>When sales pass roughly £0.7–1M a month</td></tr>
+<tr><td>Klaviyo paid tiers, SMS</td><td>Only the free tier (250 profiles) is published; we use Shopify Email instead</td><td>If the marketing team wants advanced flows</td></tr>
+<tr><td>Virtual try-on, returns portals, reviews apps</td><td>Quote-based or app-store pricing that changes often; not required to run the business</td><td>Phase 2+, if they lift conversion or cut returns</td></tr>
+<tr><td>ERP (Business Central, NetSuite), sales-tax engine</td><td>Quote-based; Xero covers one or two entities</td><td>A third legal entity, US sales-tax nexus</td></tr>
+<tr><td>Azure support plan, DDoS Network Protection</td><td>Support plan prices aren't in the official price list we used; DDoS protection is covered at our profile by Front Door</td><td>Phase 3+ (support), after a real attack (DDoS)</td></tr>
+<tr><td>Accountants, legal, insurance, SOC 2 audit, pen tests</td><td>Professional services: real company costs, but not technology and not published prices</td><td>From phase 1 (accounting) to phase 3 (audits)</td></tr>
+<tr><td>Product, freight, 3PL, shipping, ads</td><td>Unit economics of the product, not of the platform</td><td>Always: they dwarf technology cost</td></tr>
+</tbody></table></div>
+
+<h2 id="swaps">What changes, when, and why</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Component</th><th>Phase 1</th><th>Then</th><th>Trigger</th></tr></thead>
+<tbody>
+<tr><td>Storefront</td><td>Cheapest Shopify plan for the month</td><td>Grow → Advanced → Plus, chosen automatically by sales</td><td>Plan fee is smaller than the card-rate saving</td></tr>
+<tr><td>Compute</td><td>Container Apps consumption, scale to zero</td><td>Min replicas (P2) → 3 dedicated D4 nodes (P3) → 3 nodes, or 2 regions if needed (P4)</td><td>Cold starts hurt; sustained CPU above 50%</td></tr>
+<tr><td>Database</td><td>Postgres B1ms</td><td>D2 + HA → D4 + HA + DR replica → D8 + HA + geo-replica</td><td>p95 CPU above 60%; recovery-time target</td></tr>
+<tr><td>Events</td><td>Postgres outbox + Service Bus Standard</td><td>One namespace per region (P4); Premium only with the private-networking add-on</td><td>Private networking, message size</td></tr>
+<tr><td>Workflows</td><td>Temporal Cloud pay-as-you-go</td><td>Business plan (optional) for SSO and an SLA</td><td>Compliance, support needs</td></tr>
+<tr><td>LLMs</td><td>Claude Haiku + Sonnet, Opus for POs</td><td>Same routes; prompt caching and Batch API where latency allows</td><td>Spend per route; evals decide model changes</td></tr>
+<tr><td>Forecasting</td><td>Rules (reorder points)</td><td>statsforecast job (P2) → LightGBM + reconciliation job (P3)</td><td>8+ weeks of history; backtest beats baseline</td></tr>
+<tr><td>Edge</td><td>Container Apps ingress</td><td>Front Door Standard (P2) → Premium (P4, or P3 with the add-on)</td><td>Public APIs and supplier portal; managed WAF rules</td></tr>
+</tbody></table></div>
+
+<h2 id="testing">The product-testing engine (phase 1)</h2>
+<div class="grid g3">
+  <div class="card"><h4>A · Test demand</h4><p>24 models are photographed from samples. Each gets a few ad creatives and a product page with honest pre-order dates. The Budget Allocator runs Thompson sampling: every model starts with a small, equal budget and spend shifts automatically to the ones that convert.</p></div>
+  <div class="card"><h4>B · Decide by rule</h4><p>After at least 1,000 sessions per model: scale if P(conversion &gt; 2%) &gt; 90% and first-order margin after acquisition cost is positive; kill if it falls below 10% or the spend cap is hit. The rule lives in the gateway's policy, not in a prompt.</p></div>
+  <div class="card"><h4>C · Buy small, then bigger</h4><p>Winners get 150–200-unit batches by air to fulfil pre-orders. Proven sellers move to sea freight at volume prices. Losers are never stocked.</p></div>
+</div>
+
+<h2 id="regional">Regional and regulatory requirements</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Market</th><th>Requirement</th><th>When</th><th>How it is handled</th></tr></thead>
+<tbody>
+<tr><td>UK / EU</td><td>Sunglasses tested to EN ISO 12312-1 (UV filter category); UKCA / CE marking</td><td>Before each model is listed</td><td>Compliance agent blocks listing without a valid test report</td></tr>
+<tr><td>UK</td><td>ICO data-protection fee; UK GDPR and PECR consent; VAT registration at the threshold</td><td>Before launch / at the threshold</td><td>Consent captured at checkout; Xero for VAT</td></tr>
+<tr><td>US</td><td>Non-prescription sunglasses are FDA medical devices: establishment registration, device listing, impact-resistance (drop-ball) testing under 21 CFR 801.410. FDA's published annual registration fee is $11,423 (FY2026) and $13,785 (FY2027)</td><td>Before the first US sale</td><td>We register as initial importer; factories must be registered</td></tr>
+<tr><td>EU</td><td>GPSR: an EU-based responsible person for product safety; OSS VAT for EU sales</td><td>Before the first EU sale</td><td>Service provider + Xero; product files kept by the Compliance agent</td></tr>
+<tr><td>All</td><td>Data location and model inference location</td><td>Day one</td><td>Data in Azure UK South (US East copy in phase 4); Foundry deployments pinned to an approved data zone</td></tr>
+</tbody></table></div>
+
+<h2 id="reliability">Reliability and security by phase</h2>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>1 · Test</th><th>2 · Traction</th><th>3 · Scale</th><th>4 · Million</th></tr></thead>
+<tbody>
+<tr><td>Database recovery</td><td>Point-in-time restore</td><td>Zone-redundant HA standby</td><td>HA + DR replica in UK West</td><td>HA + promotable US geo-replica</td></tr>
+<tr><td>If our platform is down</td><td colspan="4">The shop keeps selling: Shopify takes orders and payments, the 3PL keeps shipping released orders. What stops is automatic change (prices, POs, ads).</td></tr>
+<tr><td>Identity &amp; secrets</td><td>One managed identity per agent; Key Vault; owners on MFA</td><td>Gateway is the only identity holding payment and supplier credentials</td><td>Defender for Containers; access reviews by the Auditor</td><td>Per-cell identities</td></tr>
+<tr><td>Edge</td><td>Container Apps ingress, HTTPS only</td><td>Front Door Standard, custom WAF rules</td><td>Standard (Premium optional)</td><td>Premium: managed WAF rules, bot protection</td></tr>
+</tbody></table></div>
+
+<h2 id="tradeoffs">Trade-offs</h2>
+<div class="decision"><span class="t">Trade-off 1</span><h4>Shopify Inbox + our own agent vs a help-desk product</h4><dl>
+<dt>Chosen</dt><dd>Shopify Inbox (included) and a shared mailbox, answered by the Resolution agent; owners see escalations in our owner console.</dd>
+<dt>Gave up</dt><dd>A polished help-desk UI for humans.</dd>
+<dt>Why</dt><dd>Help desks bill per ticket, including tickets our agent answers. The agent already keeps conversation memory in our ledger. Gorgias stays one switch away as an add-on.</dd></dl></div>
+<div class="decision"><span class="t">Trade-off 2</span><h4>Temporal from day one</h4><dl>
+<dt>Chosen</dt><dd>Temporal Cloud pay-as-you-go from month 1; it costs pennies at test volume.</dd>
+<dt>Why</dt><dd>Rewriting purchase-order sagas mid-growth is the most expensive migration on the list.</dd></dl></div>
+<div class="decision"><span class="t">Trade-off 3</span><h4>One write region vs multi-master</h4><dl>
+<dt>Chosen</dt><dd>One Postgres primary with a promotable geo-replica.</dd>
+<dt>Why</dt><dd>At under one order per second the platform isn't latency-critical, and multi-master conflicts on money and stock are a correctness risk.</dd></dl></div>
+<div class="decision"><span class="t">Trade-off 4</span><h4>Public endpoints with strong identity vs private networking</h4><dl>
+<dt>Chosen</dt><dd>Managed identities, TLS and Front Door; private networking is an optional add-on.</dd>
+<dt>Gave up</dt><dd>Network-level isolation, which some auditors prefer.</dd>
+<dt>Why</dt><dd>Card data never touches our platform (Shopify keeps PCI scope). Service Bus Premium alone would cost more than the rest of the phase 3 data tier.</dd></dl></div>
+
+<h2 id="months">All 24 months</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Month</th><th>Phase</th><th class="num">Customers</th><th class="num">Orders/day</th><th class="num">Sales</th><th class="num">Runtime</th><th class="num">Eng. + add-ons</th><th class="num">Developers</th><th class="num">All-in</th><th class="num">% of sales</th><th class="num">Payment fees</th><th class="num">LLM</th></tr></thead>
+<tbody id="tm-table"></tbody></table></div>
+
+<h2 id="sources">Sources</h2>
+<p>All retrieved 17 October 2026.</p>
+<ul>
+<li>Azure: each line in the bill of materials links to two official sources. The <b>pricing page</b> is Microsoft's human-readable page for that service (set the region to UK South and currency to USD to match). <b>Exact UK South price</b> opens Microsoft's Retail Prices API filtered to only the meters used in the calculation, so you see the precise number, e.g. <a href="https://azure.microsoft.com/en-gb/pricing/details/postgresql/flexible-server/">Postgres Flexible Server pricing</a>. Billing rules: <a href="https://learn.microsoft.com/en-us/azure/container-apps/billing">Container Apps billing</a>, <a href="https://learn.microsoft.com/en-us/azure/azure-monitor/logs/cost-logs">Log Analytics costs</a>.</li>
+<li>Claude models and Claude Code plans: <a href="https://claude.com/pricing">claude.com/pricing</a>. Microsoft Foundry bills Claude at Anthropic's list rates.</li>
+<li>Shopify plans and card rates: <a href="https://www.shopify.com/uk/pricing">shopify.com/uk/pricing</a>. Shopify Email: <a href="https://www.shopify.com/email-marketing">shopify.com/email-marketing</a>. PayPal: <a href="https://www.paypal.com/uk/business/paypal-business-fees">PayPal UK business fees</a>.</li>
+<li>Temporal Cloud: <a href="https://temporal.io/pricing">temporal.io/pricing</a>. GitHub: <a href="https://github.com/pricing">github.com/pricing</a> and <a href="https://docs.github.com/en/billing/reference/actions-runner-pricing">Actions runner pricing</a>.</li>
+<li>Google Workspace: <a href="https://workspace.google.com/intl/en_uk/pricing">workspace.google.com</a>. Jira free plan: <a href="https://support.atlassian.com/jira-cloud-administration/docs/explore-jira-cloud-plans/">Atlassian support</a>. Xero: <a href="https://www.xero.com/uk/pricing-plans/">xero.com/uk</a>. Gorgias (add-on): <a href="https://www.gorgias.com/pricing">gorgias.com/pricing</a>.</li>
+<li>FDA registration fee: <a href="https://www.fda.gov/medical-device-user-fee-amendments-mdufa">FDA MDUFA fees</a>.</li>
+</ul>
+
+</div></main>
+<dialog id="ev-dlg" class="ev-dlg" aria-labelledby="ev-title"><div class="ev-head"><div><span class="ev-k">Official price evidence · UK South</span><h3 id="ev-title"></h3></div><button type="button" class="icon-btn" data-close aria-label="Close">✕</button></div><div class="table-wrap" id="ev-body"></div><p class="ev-meta" id="ev-meta"></p></dialog>
+<script src="assets/price-evidence.js?v=20261025c"></script>
+<script src="assets/scale-model.js?v=20261025c"></script>
+<script src="assets/scale.js?v=20261025c"></script>
+</body>
+</html>

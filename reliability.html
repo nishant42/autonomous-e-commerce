@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reliability & Recovery</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deep dive F · Reliability and failure recovery</div>
+<h1>Everything fails; nothing is lost or done twice</h1>
+<p class="lede">Reliability rests on three guarantees. <strong>At-least-once delivery</strong> of events, plus <strong>idempotent</strong> handling, gives effectively-once outcomes. <strong>Durable workflows</strong> resume after crashes. Every automated behaviour has a <strong>degraded mode</strong> that keeps the shop trading.</p>
+
+<h2>Failure taxonomy and response</h2>
+<div class="table-wrap"><table>
+<tr><th>Failure class</th><th>Example</th><th>Detection</th><th>Response</th></tr>
+<tr><td>Transient external</td><td>3PL API 503, Shopify rate limit</td><td>HTTP status, timeouts</td><td>Retry with exponential backoff and jitter; honour <code>Retry-After</code>; circuit breaker per vendor</td></tr>
+<tr><td>Permanent external</td><td>Supplier rejects PO line (discontinued SKU)</td><td>Adapter error class</td><td>No retry; compensation; event to the owning agent to re-plan (e.g. substitute SKU)</td></tr>
+<tr><td>Model unavailable / slow</td><td>Regional capacity issue</td><td>AI gateway health, latency SLO</td><td>Failover to second deployment or region, then to a second model vendor; non-urgent tasks queue</td></tr>
+<tr><td>Model misbehaviour</td><td>Validation errors spike after an update</td><td>Sentinel behaviour metrics</td><td>Automatic quarantine; roll back to the previous agent version (pinned bundle)</td></tr>
+<tr><td>Poison message</td><td>Malformed webhook payload</td><td>Repeated handler failure</td><td>Dead-letter queue after N attempts; alert; replay tool after fix</td></tr>
+<tr><td>Data drift vs reality</td><td>Ledger stock ≠ 3PL count</td><td>Hourly reconciliation</td><td>Compensating movement plus investigation case; SKU frozen if the drift is large</td></tr>
+<tr><td>Region outage</td><td>Primary region down</td><td>Health probes</td><td>DR runbook: Postgres replica promote, Service Bus geo-DR alias, Temporal namespace failover. RPO ≤ 5 min, RTO ≤ 1 h</td></tr>
+</table></div>
+
+<h2>Retry policy by layer</h2>
+<pre><code>adapter.http:     { attempts: 5, backoff: "exp(1s..60s)+jitter", retryOn: [429, 500, 502, 503, 504, "ETIMEDOUT"] }
+temporal.activity:{ attempts: 6, initialInterval: "5s", maxInterval: "10m", nonRetryable: ["ValidationError", "PolicyDenied", "Halted"] }
+bus.consumer:     { maxDeliveryCount: 10, then: "DLQ", dedupe: "event.id (7-day window)" }
+model.call:       { attempts: 2, onFail: "failover deployment → alt vendor", respect: "shared task deadline" }</code></pre>
+<p class="muted">Validation errors, policy denials and halts are never retried, because retrying a wrong answer only makes it more expensive.</p>
+
+<h2>Degraded modes (what "off" looks like)</h2>
+<div class="table-wrap"><table>
+<tr><th>Component down or quarantined</th><th>The business keeps running because…</th></tr>
+<tr><td>All LLMs</td><td>Orders, allocation, fulfilment, reconciliation and T0 rules keep running on deterministic paths. Customer care switches to acknowledgement macros with an extended SLA. Supplier inbound email queues.</td></tr>
+<tr><td>Pricing agent</td><td>Prices freeze at the last known good price book. Scheduled promotions still run (pre-approved).</td></tr>
+<tr><td>Forecasting</td><td>The planner uses the last published forecast with widened safety stock (×1.2).</td></tr>
+<tr><td>Marketing agents</td><td>Ad budgets hold at the current daily level; lifecycle flows continue (pre-built in Klaviyo).</td></tr>
+<tr><td>Action Gateway</td><td>No side effects anywhere (fail closed). Shopify keeps selling on current state. This is the only component whose outage pauses autonomy, so it is multi-instance and multi-region.</td></tr>
+<tr><td>Temporal</td><td>Workflows pause and resume exactly where they were. Events buffer in Service Bus.</td></tr>
+</table></div>
+
+<h2>Recovery and replay</h2>
+<div class="grid g3">
+  <div class="card"><h4>Replay events</h4><p>Consumers are idempotent and projections are rebuildable from the append-only log, so a buggy projection is fixed by deploying the fix and replaying from an offset.</p></div>
+  <div class="card"><h4>Replay decisions</h4><p>Every proposal stores its <code>as_of</code> snapshot and agent version. A decision can be re-run on a new agent version and diffed. This is the basis of shadow evaluation.</p></div>
+  <div class="card"><h4>Undo actions</h4><p>Each action type declares its compensation: price change → previous price; PO → cancel before ship or amend; ad budget → previous budget. Runbooks can undo "all actions by agent X since time T".</p></div>
+</div>
+
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  I["Incident detected<br/>(Sentinel)"] --> Q["Quarantine agent<br/>(seconds)"]
+  Q --> F["Fallback policy serves<br/>the domain"]
+  Q --> IC["Incident Commander:<br/>collect evidence, blast radius query"]
+  IC --> U["Compensate bad actions<br/>(runbook: undo since T)"]
+  IC --> B["Owner brief<br/>(if customer or money impact)"]
+  U --> FX["Fix: prompt / tool / policy / model pin"]
+  FX --> SH["Shadow replay on<br/>incident window"]
+  SH --> CN["Canary 5%"] --> A["Active"]
+  A --> PM["Post-mortem → new eval cases"]
+</script>
+</div>
+
+</div></main>
+</body>
+</html>

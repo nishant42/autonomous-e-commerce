@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Technology Stack</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">09 · Proposed technology stack</div>
+<h1>Azure-centred, open at the seams</h1>
+<p class="lede">One cloud keeps identity, networking, secrets and billing in one place, and gives a single security model (Entra ID) across people, services and agents. Every seam, including models, bus, workflow and observability, uses an open or standard interface so it can be replaced.</p>
+
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart TB
+  subgraph SaaS["Bought SaaS"]
+    direction LR
+    s1["Shopify Plus"]; s2["Stripe"]; s3["3PL"]; s4["Xero"]; s5["Klaviyo"]; s6["Gorgias"]; s7["EDI provider"]
+  end
+  subgraph App["Our services (TypeScript / Python on Azure Container Apps)"]
+    direction LR
+    a1["Adapters"]; a2["Agent Harness"]; a3["Action Gateway + OPA"]; a4["Ops Ledger services"]; a5["Console"]
+  end
+  subgraph AI["AI platform"]
+    direction LR
+    m1["Azure AI Foundry<br/>model catalog · agent service · evals"]; m2["APIM AI Gateway"]; m3["Azure ML"]; m4["AI Search"]; m5["Document Intelligence"]; m6["Content Safety"]
+  end
+  subgraph Run["Runtime & data"]
+    direction LR
+    r1["Temporal Cloud"]; r2["Service Bus / Event Hubs"]; r3["PostgreSQL Flexible + pgvector"]; r4["Redis"]; r5["ADLS + Fabric"]
+  end
+  subgraph Sec["Security & ops"]
+    direction LR
+    x1["Entra ID (agent identities)"]; x2["Key Vault"]; x3["Private Link · Firewall"]; x4["Defender · Sentinel SIEM"]; x5["OpenTelemetry → App Insights · Grafana"]
+  end
+  SaaS --- App --- AI
+  App --- Run
+  Sec --- App
+</script>
+</div>
+
+<h2>Stack by layer</h2>
+<div class="table-wrap"><table>
+<tr><th>Layer</th><th>Choice</th><th>Why</th><th>Alternatives considered</th></tr>
+<tr><td>Languages</td><td>TypeScript (harness, gateway, adapters); Python (ML, forecasting)</td><td>Typed contracts end to end (Zod / JSON Schema). Python has the ML ecosystem.</td><td>Go for the gateway if latency-critical</td></tr>
+<tr><td>Compute</td><td>Azure Container Apps (+ Jobs for RPA and batch)</td><td>Scale to zero, KEDA autoscaling on queue depth, managed identity, no cluster to operate.</td><td>AKS (more control, more ops)</td></tr>
+<tr><td>LLMs</td><td>Azure AI Foundry model deployments, with tiered routing: a small fast model for triage, classification and extraction; a frontier reasoning model for procurement, incidents and panels; a second-vendor frontier model as failover</td><td>Enterprise data boundary, content safety, regional deployment, provisioned throughput when needed.</td><td>Direct vendor APIs (weaker governance)</td></tr>
+<tr><td>AI gateway</td><td>Azure API Management with its AI-gateway policies</td><td>Per-agent token quotas, load balancing across deployments, circuit breakers, semantic caching, and usage metrics for chargeback.</td><td>LiteLLM proxy</td></tr>
+<tr><td>Agent runtime</td><td>In-house harness + Foundry Agent Service for hosted tool-calling where useful</td><td>Full control of the loop, validation and memory. Foundry supplies tracing and evaluations.</td><td>LangGraph, Semantic Kernel / Microsoft Agent Framework (good; we keep the harness thin either way)</td></tr>
+<tr><td>Agent ↔ tool protocol</td><td>MCP servers for read tools; typed <code>propose_action</code> for writes</td><td>A standard tool interface, reusable across agents and models.</td><td>Bespoke function schemas only</td></tr>
+<tr><td>ML</td><td>Azure ML (training pipelines, registry, managed endpoints); LightGBM, statsforecast, hierarchical reconciliation</td><td>Reproducible training, model lineage, blue/green endpoints.</td><td>Databricks ML</td></tr>
+<tr><td>Documents</td><td>Azure AI Document Intelligence + LLM structured outputs</td><td>OCR and layout from a specialist, semantics from the LLM, with per-field confidence.</td><td>LLM-only vision (less stable on tables)</td></tr>
+<tr><td>Retrieval</td><td>Azure AI Search (hybrid BM25 + vector) and pgvector for memory</td><td>Policy and contract retrieval with filters and security trimming.</td><td>Dedicated vector DB (not needed at this scale)</td></tr>
+<tr><td>Workflow</td><td>Temporal Cloud</td><td>Durable timers, sagas, replay, versioning.</td><td>Azure Durable Functions, Logic Apps (weaker for complex sagas)</td></tr>
+<tr><td>Messaging</td><td>Azure Service Bus Premium; Event Hubs for telemetry</td><td>Sessions for ordering, DLQ, geo-DR, private link.</td><td>Kafka / Confluent (more power, more ops)</td></tr>
+<tr><td>Operational DB</td><td>Azure Database for PostgreSQL Flexible Server (zone-redundant HA)</td><td>ACID, row-level security, JSONB, pgvector, logical replication to the lake.</td><td>Cosmos DB (weaker multi-row transactions)</td></tr>
+<tr><td>Analytics</td><td>ADLS Gen2 + Microsoft Fabric (lakehouse); dbt for models</td><td>History, features, MMM, finance reporting.</td><td>Snowflake</td></tr>
+<tr><td>Policy</td><td>Open Policy Agent (Rego) inside the Action Gateway</td><td>Policy-as-code, unit-testable, versioned in git.</td><td>Cedar</td></tr>
+<tr><td>Browser automation</td><td>Playwright workers in isolated Container Apps Jobs</td><td>Deterministic scripts first, with an LLM only for locating elements when a page changes.</td><td>Hosted browser services</td></tr>
+<tr><td>Identity</td><td>Microsoft Entra ID: managed or workload identity per agent and service; OAuth 2.0 token exchange / on-behalf-of for delegated calls</td><td>One identity plane across people, services and agents; conditional access; full sign-in logs.</td><td>n/a</td></tr>
+<tr><td>Secrets</td><td>Azure Key Vault (runtime fetch via managed identity, short TTL cache)</td><td>No secrets in code, images or prompts; rotation; audit.</td><td>HashiCorp Vault</td></tr>
+<tr><td>Observability</td><td>OpenTelemetry → Application Insights / Log Analytics; Foundry tracing for LLM spans; Grafana; Microsoft Sentinel for security</td><td>One trace from webhook to model call to side effect.</td><td>Datadog, Langfuse</td></tr>
+<tr><td>CI/CD</td><td>GitHub Actions; IaC with Bicep or Terraform; evaluation gates in pipeline; per-branch preview databases</td><td>Prompts, tools and policies ship like code, with tests.</td><td>Azure DevOps</td></tr>
+</table></div>
+
+<h2>Model routing policy</h2>
+<div class="table-wrap"><table>
+<tr><th>Task class</th><th>Model tier</th><th>Examples</th><th>Why</th></tr>
+<tr><td>Classify / route / detect</td><td>Small, fast</td><td>Ticket triage, email intent, language detection</td><td>High volume, narrow output space; about 10-30× cheaper.</td></tr>
+<tr><td>Extract to schema</td><td>Small or mid + OCR</td><td>Supplier confirmations, invoices, packing lists</td><td>Structured outputs and a verifier catch errors; escalate to frontier on low confidence.</td></tr>
+<tr><td>Converse with customers</td><td>Mid</td><td>WISMO, care advice, returns</td><td>Tone and grounding matter; latency matters.</td></tr>
+<tr><td>Reason over trade-offs</td><td>Frontier</td><td>Procurement options, incident analysis, Buy Panel</td><td>Low volume, high stakes.</td></tr>
+<tr><td>Judge / verify</td><td>A different model family from the maker where possible</td><td>Reply QA, extraction verification, Auditor</td><td>Reduces correlated errors between maker and checker.</td></tr>
+</table></div>
+
+</div></main>
+</body>
+</html>

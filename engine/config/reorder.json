@@ -1,0 +1,48 @@
+{
+  "agent": "reorder",
+  "version": 7,
+  "model": {
+    "plan": "claude-sonnet-5-5",
+    "extract": "claude-haiku-5-5",
+    "max_steps": 25,
+    "token_budget_month": 1200000
+  },
+  "reads": [
+    "sales_panel",
+    "availability_history",
+    "lost_demand_signals",
+    "returns_by_variant",
+    "supplier_terms",
+    "open_orders",
+    "cash_position",
+    "economics",
+    "compute_quantities"
+  ],
+  "writes": [
+    "propose_reorder",
+    "raise_anomaly"
+  ],
+  "policy": {
+    "review_period_days": 7,
+    "shelf_life_days": null,
+    "cover_cap_weeks": 16,
+    "min_history_days": 28,
+    "markdown_curve": "none",
+    "intended_discount_pct": 0,
+    "substitution_group_aware": true
+  },
+  "_vertical_examples": {
+    "supermarket_fresh": {
+      "review_period_days": 1,
+      "shelf_life_days": 7,
+      "cover_cap_weeks": 0.3,
+      "markdown_curve": "linear_from_day_1"
+    },
+    "sunglasses": {
+      "review_period_days": 14,
+      "shelf_life_days": null,
+      "cover_cap_weeks": 26,
+      "markdown_curve": "seasonal_end_of_summer"
+    }
+  }
+}

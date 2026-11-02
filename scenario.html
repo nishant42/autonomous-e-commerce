@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scenario: Towel Sells 3×</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">11 · End-to-end scenario</div>
+<h1>"A Yves Delorme towel suddenly sells three times faster than expected"</h1>
+<p class="lede">A minute-by-minute walkthrough across forecasting, inventory, procurement, supplier interaction, finance, pricing, marketing, customer care and fulfilment. No human is involved. One owner receives an informational summary.</p>
+
+<h2>Starting position</h2>
+<div class="grid g4">
+  <div class="card stat"><div class="v">3.0/day</div><div class="l">planned P50 demand (bath towel, white)</div></div>
+  <div class="card stat"><div class="v">9.3/day</div><div class="l">observed over last 36h (3.1×)</div></div>
+  <div class="card stat"><div class="v">42 ATP</div><div class="l">UK 24 · EU 18 (after allocations)</div></div>
+  <div class="card stat"><div class="v">60 on order</div><div class="l">existing PO, due in 12 days</div></div>
+</div>
+<p class="muted">SKU <code>YD-TWL-ETOILE-BATH-BLANC</code> (illustrative). Unit cost €28, list price €79, currently on a 10% promotion. Supplier lead time P50 24 days, P90 33 days. Case pack 6.</p>
+
+<h2>Sequence overview</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant DS as Demand Sensing
+  participant FR as Fraud Screening
+  participant FC as Forecasting
+  participant IP as Inventory Position
+  participant MK as Marketing
+  participant PX as Pricing
+  participant RP as Planner
+  participant BP as Buy Panel
+  participant PR as Procurement
+  participant SL as Supplier Liaison
+  participant YD as Yves Delorme
+  participant FN as Finance
+  participant CC as Customer Care
+  participant LG as Logistics / 3PL
+  DS->>FR: is the demand real? (velocity anomaly)
+  FR-->>DS: yes: 311 distinct customers, normal risk mix
+  DS->>FC: demand.anomaly (cause: organic referral spike)
+  FC-->>IP: intraday re-forecast P50 9.1 · P90 13.4 (decaying)
+  IP-->>MK: cover 2.6 days → CRITICAL
+  IP-->>PX: cover 2.6 days → CRITICAL
+  MK->>MK: pause SKU acquisition ads · promote sister SKUs · waitlist on
+  PX->>PX: end 10% promo (T0) · no scarcity uplift (inbound < lead time)
+  IP-->>RP: stock.low
+  RP->>PR: recommend 240 units (P90 over lead time + safety)
+  PR->>BP: anomaly-driven PO → escalated to T2
+  BP-->>PR: majority: 180 now + review option for 60 in 10 days
+  PR->>SL: CreatePurchaseOrder(180) + expedite existing PO
+  SL->>YD: EDI 850 (new PO) + email to account manager (expedite)
+  YD-->>SL: email: 120 ship in 5 days, 60 in 3 weeks, expedite fee €380
+  SL->>PR: verified extraction → AmendPO (split delivery, T1)
+  PR->>FN: commitment + fee → open-to-buy, cash forecast
+  IP-->>CC: stock-out imminent → backorder mode (confirmed inbound)
+  CC->>CC: proactive delivery-date messaging
+  YD-->>LG: ASN → inbound notice · priority receiving
+  LG-->>IP: goods.received → ATP up → back-in-stock flow
+  IP-->>MK: cover > 4 weeks (hysteresis) → ads resume
+</script>
+</div>
+<p class="caption">Figure 11.1: Cross-domain reaction. Each arrow is an event or a tool call with a correlation ID linking it to case <code>CASE-2026-0930-017</code>.</p>
+
+<h2>Timeline</h2>
+<div class="timeline">
+  <div class="tl-item"><div class="tl-time">T+0 · Tue 10:02</div><h4>Detect: Demand Sensing</h4>
+    <p>A CUSUM change-point detector on the order stream crosses threshold: 9.3/day vs 3.0 plan over 36h. It emits <code>demand.anomaly</code> and opens case CASE-2026-0930-017. The LLM classifies the likely cause from tool data: 71% of sessions come from one interior-design publication referral, and there is no campaign of ours running. Cause: <strong>organic, external</strong>.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+1 min</div><h4>Validate: Fraud Screening</h4>
+    <p>First question: <em>is the demand real?</em> 311 distinct customers, normal card-country mix, Radar risk distribution within baseline, no address clustering. Verdict: genuine demand. <strong>If it had been a fraud ring, the flow would stop here: hold the orders and never place a PO.</strong></p></div>
+
+  <div class="tl-item"><div class="tl-time">T+3 min</div><h4>Re-forecast: Forecasting Agent</h4>
+    <p>An intraday re-forecast uses a spike-decay prior learned from past external-referral events: P50 9.1/day, tapering to 1.6× baseline over about 3 weeks. P90 is 13.4/day. The forecast is tagged <code>anomaly_influenced=true</code>, which automatically lifts the tier of any downstream PO.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+4 min</div><h4>Position: Inventory Position Service</h4>
+    <p>ATP 42 at P50 gives 2.6 days of cover, so the <strong>critical</strong> band. Inbound 60 units arrive in 12 days, a 9-day gap. Node transfer EU→UK is evaluated and rejected: EU cover is also critical, and the cross-border landed cost exceeds the benefit. The rejection is logged with its reason.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+5 min</div><h4>Adjust demand: Marketing</h4>
+    <p>The coupling rule for critical cover fires. The Budget Allocator pauses paid acquisition on the SKU (T0; the €140/day it was spending moves to sister SKUs with more than 10 weeks of cover). The Growth Strategist asks the Creative Agent for a "Complete the Étoile set" email to the waitlist of related SKUs. It passes the Brand Guardian and is published (T1). Back-in-stock capture is enabled on the product page.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+5 min</div><h4>Adjust price: Pricing Agent</h4>
+    <p>Ending the 10% promotion is proposed and executed (T0). Price Guard passes it: within band, first change this week, and reference-price rules satisfied. A scarcity uplift is <strong>not</strong> proposed, because policy allows scarcity pricing only when no confirmed inbound exists within lead time, and 60 units are due in 12 days.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+8 min</div><h4>Plan: Replenishment Planner</h4>
+    <p>Order-up-to over lead time P90 (33 days) with a 97% service level gives 240 units. MOQ and case pack are satisfied. Cover after receipt is 11 weeks, under the 16-week cap.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+10 min</div><h4>Decide: Procurement Agent + Buy Panel</h4>
+    <p>The PO Builder prices 240 units at €6,720, which would normally be T1. Because the forecast is anomaly-influenced, policy lifts it to <strong>T2 → Buy Panel</strong>. Frozen decision pack; three personas in parallel:</p>
+    <ul>
+      <li><strong>Demand Planner</strong>: 240, since P90 demand over lead time justifies it.</li>
+      <li><strong>CFO</strong>: 180, since spikes from external referrals decay and overstock ties up €1.7k of cash for about 5 months.</li>
+      <li><strong>Risk Officer</strong>: supplier OTIF 94% and the price is stable, so approve either; prefers a split delivery.</li>
+    </ul>
+    <p>Synthesis: <strong>majority → 180 units now, plus a scheduled review in 10 days for up to 60 more</strong>, and a request to expedite the existing 60. The Action Gateway executes <code>CreatePurchaseOrder</code> with key <code>po:sup_yd:ETOILE-BATH-BLANC:2026-W40:v1</code>.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+12 min</div><h4>Transmit: Supplier Liaison</h4>
+    <p>For this supplier, POs go by EDI 850 through the EDI provider. The 997 functional acknowledgement arrives within minutes. The expedite request goes by <strong>email</strong> to the account manager, because the supplier has no API for expedites: a template with PO facts plus a short LLM-written courteous paragraph. Outbound goes only to the verified supplier domain.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+26 h</div><h4>Interpret the reply: maker-checker</h4>
+    <p>The supplier replies: 120 units can ship in 5 days, 60 in 3 weeks, expedite fee €380, price unchanged. The Doc Extractor turns this into JSON. The Verifier checks the PO reference exists, quantities sum to 180, the price matches the contract price list and the fee sits within the expedite policy (≤ 8% of PO value). The result is an <code>AmendPO</code> for the split delivery at T1. The PO state moves to Acknowledged → Amended.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+26 h</div><h4>Finance</h4>
+    <p>Commitment of €5,040 plus €380 is recorded. Open-to-buy for the supplier is reduced. The 13-week cash forecast is updated: runway 18.6 weeks, above the 12-week floor. Landed cost is recalculated with the fee (+€2.11 per unit spread across the 180) and sent to Pricing. Margin stays above the floor.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+2 days</div><h4>Stock-out and customer care</h4>
+    <p>ATP reaches 0 at UK. Because inbound is confirmed within 10 days, the Order Orchestrator switches the SKU to <strong>backorder mode</strong> (T1) with a clear "ships by 9 Oct" message. The Care Resolution Agent answers delivery-date questions from the Ledger's PO dates, never from a guess. It proactively emails the 14 backordered customers. Any customer may cancel for a full refund (T0).</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+6 days</div><h4>Fulfilment: Logistics and 3PL</h4>
+    <p>The ASN (EDI 856) arrives. The Inbound Coordinator creates the 3PL inbound notice and requests priority receiving. The receipt count is 120, matching the ASN. ATP goes up, backorders are allocated first, then Shopify stock is pushed. The Lifecycle agent triggers back-in-stock emails to 212 waitlisted customers (T0, consent-checked).</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+7 days</div><h4>Recover demand generation</h4>
+    <p>Cover reaches 5.2 weeks, above the 5-week exit threshold for "tight" (hysteresis). The Budget Allocator resumes SKU acquisition ads at 50% and ramps up by bandit.</p></div>
+
+  <div class="tl-item"><div class="tl-time">T+10 days</div><h4>Close the loop</h4>
+    <p>Scheduled review: velocity has decayed to 1.7× baseline, close to the CFO's view. The planner recommends 30 more units, not 60, as a T0 PO. The case closes. The Auditor reviews the case. The Forecasting Agent adds the event to its external-spike training set. The invoice later three-way matches, and payment is scheduled to terms. The owner's weekly report says: "Organic spike on Étoile towel handled; 14 backorders, 0 cancellations, +€4.9k gross margin vs baseline."</p></div>
+</div>
+
+<h2>Reaction summary by domain</h2>
+<div class="table-wrap"><table>
+<tr><th>Domain</th><th>What happened</th><th>Tier</th><th>Technique</th></tr>
+<tr><td>Forecasting</td><td>Change-point detection → intraday re-forecast with decay prior</td><td>T0</td><td><span class="tag ml">ML</span></td></tr>
+<tr><td>Risk</td><td>Validated the demand is real before any spend</td><td>T0</td><td><span class="tag ml">ML</span> <span class="tag rules">Rules</span></td></tr>
+<tr><td>Inventory</td><td>Cover recalculated; transfer considered and rejected</td><td>T0</td><td><span class="tag det">Det</span></td></tr>
+<tr><td>Procurement</td><td>Anomaly-driven PO escalated to panel; 180 + review option; expedite</td><td>T2 → T1</td><td><span class="tag llm">LLM panel</span> <span class="tag det">Det builder</span></td></tr>
+<tr><td>Supplier</td><td>EDI for PO; email for expedite; reply verified</td><td>T1</td><td><span class="tag det">EDI</span> <span class="tag llm">LLM + verifier</span></td></tr>
+<tr><td>Finance</td><td>Commitment, cash forecast, landed cost</td><td>T0</td><td><span class="tag det">Det</span></td></tr>
+<tr><td>Pricing</td><td>Ended promo; scarcity uplift withheld by policy</td><td>T0</td><td><span class="tag rules">Rules</span> <span class="tag ml">ML</span></td></tr>
+<tr><td>Marketing</td><td>Paused SKU ads, redirected budget, waitlist and cross-sell creative</td><td>T0/T1</td><td><span class="tag ml">Bandit</span> <span class="tag llm">LLM</span></td></tr>
+<tr><td>Customer care</td><td>Backorder messaging; proactive updates from real PO dates</td><td>T1</td><td><span class="tag llm">LLM</span> grounded</td></tr>
+<tr><td>Fulfilment</td><td>Priority receiving; backorders first; back-in-stock</td><td>T0</td><td><span class="tag wf">Workflow</span></td></tr>
+</table></div>
+
+<div class="callout"><span class="t">What would have made a human get involved?</span>
+<ul>
+  <li>A PO above €60k (T3), or the panel returning a split verdict.</li>
+  <li>The supplier asking to change bank details or requesting prepayment (always T3).</li>
+  <li>Fraud Screening finding that the spike was a coordinated attack. The Control Tower would freeze the SKU and page the owner.</li>
+  <li>The supplier rejecting the expedite and no other supplier SKU being available, with backorders exceeding 30 days. The Incident Commander would brief the owner on customer-communication options.</li>
+</ul></div>
+
+</div></main>
+</body>
+</html>

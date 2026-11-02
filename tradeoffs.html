@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Key Trade-offs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">10 · Key trade-offs</div>
+<h1>The decisions that could have gone the other way</h1>
+<p class="lede">Each decision records what was chosen, what was given up, and the signal that would make me revisit it.</p>
+
+<div class="decision"><span class="t">Trade-off 1</span><h4>Many narrow agents vs one general "operator" agent</h4><dl>
+<dt>Chosen</dt><dd>About 30 narrow agents with small tool sets, coordinated by events and workflows.</dd>
+<dt>Gave up</dt><dd>Simplicity of one agent and cross-domain reasoning "for free".</dd>
+<dt>Why</dt><dd>Reliability falls as tool count and context grow. Narrow agents can be evaluated, permissioned and quarantined separately. Cross-domain reasoning is handled explicitly through case records and panels.</dd>
+<dt>Revisit if</dt><dd>Coordination overhead (hand-off latency, duplicated context) becomes the dominant failure mode.</dd></dl></div>
+
+<div class="decision"><span class="t">Trade-off 2</span><h4>LLM proposes, deterministic gateway executes</h4><dl>
+<dt>Chosen</dt><dd>No direct side effects from models. Typed proposals only.</dd>
+<dt>Gave up</dt><dd>Some agility: every new action type needs a schema, a policy and an adapter.</dd>
+<dt>Why</dt><dd>It makes safety provable and audit complete, and it keeps credentials out of prompts.</dd>
+<dt>Revisit if</dt><dd>Never for money or stock. Possibly relax for read-only exploratory tools.</dd></dl></div>
+
+<div class="decision"><span class="t">Trade-off 3</span><h4>Choreography + orchestration hybrid vs pure event choreography</h4><dl>
+<dt>Chosen</dt><dd>Events between domains, Temporal workflows inside them.</dd>
+<dt>Gave up</dt><dd>One uniform model; the team must understand both.</dd>
+<dt>Why</dt><dd>With pure choreography, "where is PO 1234 stuck?" is hard to answer and compensation is hard to guarantee. With pure orchestration, domains become coupled.</dd>
+<dt>Revisit if</dt><dd>Workflow count explodes with little logic in each. Then fold simple ones back into event handlers.</dd></dl></div>
+
+<div class="decision"><span class="t">Trade-off 4</span><h4>Own Ops Ledger vs a full ERP as system of record</h4><dl>
+<dt>Chosen</dt><dd>Our own event-driven Ops Ledger, plus accounting SaaS for statutory books.</dd>
+<dt>Gave up</dt><dd>Out-of-the-box ERP features and an established audit story.</dd>
+<dt>Why</dt><dd>ERPs are built for human clerks and batch processes. Agents need low-latency, event-native state with proposal and decision history.</dd>
+<dt>Revisit if</dt><dd>Multi-entity or multi-country complexity grows. Then adopt Business Central or NetSuite behind the same Ledger events.</dd></dl></div>
+
+<div class="decision"><span class="t">Trade-off 5</span><h4>Autonomy thresholds: speed vs safety</h4><dl>
+<dt>Chosen</dt><dd>Conservative T0 limits at launch, widened by evidence (Auditor precision above 99% for 30 days lifts a limit by one step).</dd>
+<dt>Gave up</dt><dd>Some early margin and speed from verification latency.</dd>
+<dt>Why</dt><dd>Trust is earned per action type with data, the way a new employee's signing authority grows.</dd>
+<dt>Revisit</dt><dd>Continuously, driven by metrics rather than opinion.</dd></dl></div>
+
+<div class="decision"><span class="t">Trade-off 6</span><h4>Verifier agents: cost and latency vs error rate</h4><dl>
+<dt>Chosen</dt><dd>Verifiers on T2, on all money-moving extractions and on customer-facing text. Sampling for T0/T1.</dd>
+<dt>Gave up</dt><dd>Roughly 20-35% more LLM spend and a few seconds of latency on verified paths.</dd>
+<dt>Why</dt><dd>One wrong supplier price accepted, or one false promise to a customer, costs more than a month of verifier tokens.</dd>
+<dt>Revisit if</dt><dd>A verifier's catch rate drops close to zero over a large sample. Then downgrade it to sampling.</dd></dl></div>
+
+<div class="decision"><span class="t">Trade-off 7</span><h4>Browser automation for supplier portals</h4><dl>
+<dt>Chosen</dt><dd>Allowed as the second-to-last rung, behind deterministic scripts, with an LLM only for self-healing selectors. Read-mostly.</dd>
+<dt>Gave up</dt><dd>Robustness: portals change without notice, and there are terms-of-service considerations.</dd>
+<dt>Why</dt><dd>Some suppliers offer nothing else, and "no perfect API" is a stated constraint.</dd>
+<dt>Revisit</dt><dd>At each supplier review. Push for EDI or API in the contract when volume justifies it.</dd></dl></div>
+
+<div class="decision"><span class="t">Trade-off 8</span><h4>Single cloud (Azure) vs best-of-breed multi-cloud</h4><dl>
+<dt>Chosen</dt><dd>Azure plus SaaS, with open interfaces (OTel, CloudEvents, an OpenAI-compatible gateway, Postgres).</dd>
+<dt>Gave up</dt><dd>Some best-of-breed options and some negotiating leverage.</dd>
+<dt>Why</dt><dd>One identity plane (Entra) for agents and services, private networking and a single compliance boundary. For a small platform team, operational simplicity wins.</dd>
+<dt>Revisit if</dt><dd>A required model or capability is unavailable in-region.</dd></dl></div>
+
+<div class="decision"><span class="t">Trade-off 9</span><h4>Scarcity pricing on premium goods</h4><dl>
+<dt>Chosen</dt><dd>Allowed within narrow bands (≤ +10%), honouring MAP and parity rules, and never on essentials during complaints.</dd>
+<dt>Gave up</dt><dd>Some short-term margin optimisation.</dd>
+<dt>Why</dt><dd>Brand trust and the supplier relationship (a premium supplier's price policy) matter more than squeezing out a spike.</dd>
+<dt>Revisit</dt><dd>With supplier agreement and customer-sentiment data.</dd></dl></div>
+
+<div class="decision"><span class="t">Trade-off 10</span><h4>Thin in-house harness vs a full agent framework</h4><dl>
+<dt>Chosen</dt><dd>A thin harness we own, on Foundry model hosting and tracing, plus MCP tools.</dd>
+<dt>Gave up</dt><dd>Framework conveniences such as graph builders and prebuilt memory.</dd>
+<dt>Why</dt><dd>The parts that decide safety (the tool loop, validation boundary, memory hygiene and proposal semantics) are exactly what frameworks abstract away. We keep them explicit and tested.</dd>
+<dt>Revisit if</dt><dd>A framework offers these as explicit, testable primitives. Adopting one would be low-risk because agents already talk through standard protocols.</dd></dl></div>
+
+</div></main>
+</body>
+</html>

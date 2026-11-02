@@ -1,0 +1,40 @@
+const {JSDOM}=require('jsdom');
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'../ui'),base='http://127.0.0.1:8787';
+let count=0;
+function check(name,fn){fn();count++;console.log('PASS',name);}
+async function waitFor(fn){const started=Date.now();while(!fn()){if(Date.now()-started>60000)throw Error('Loading timeout');await new Promise(r=>setTimeout(r,30));}}
+(async()=>{
+ const dom=new JSDOM(fs.readFileSync(path.join(root,'demo.html'),'utf8'),{url:base,runScripts:'outside-only'}),w=dom.window,d=w.document;
+ w.AbortController=AbortController;w.fetch=(u,o)=>fetch(base+u,o);w.eval(fs.readFileSync(path.join(root,'demo.js'),'utf8'));
+ check('existing shop is embedded, not rebuilt',()=>assert.equal(d.getElementById('shop-frame').src,'http://localhost:8000/dk/store'));
+ check('shop is the opening view',()=>assert.equal(d.getElementById('shop-view').hidden,false));
+ d.getElementById('view-agents').click();
+ check('one click switches behind the scenes',()=>assert.equal(d.getElementById('agents-view').hidden,false));
+ await waitFor(()=>d.querySelector('[data-rule="availability"]'));
+ check('three connected agents render',()=>assert.equal(d.querySelectorAll('[data-agent]').length,3));
+ check('reorder branches show actual availability',()=>assert.ok(d.querySelector('[data-rule="availability"]').textContent.includes('22 / 90')));
+ d.querySelector('[data-rule="availability"]').click();
+ check('a rule opens its numbers and explanation',()=>{assert.equal(d.getElementById('drawer').hidden,false);assert.ok(d.getElementById('drawer-body').textContent.includes('rate_per_buyable_day'));});
+ d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape'}));
+ check('Escape closes the rule detail',()=>assert.equal(d.getElementById('drawer').hidden,true));
+ const v=d.getElementById('context');
+ check('reorder can inspect imported shop variants',()=>assert.ok([...v.options].some(o=>o.value.startsWith('medv_'))));
+ const live=[...v.options].find(o=>o.value.startsWith('medv_'));v.value=live.value;v.dispatchEvent(new w.Event('change',{bubbles:true}));
+ check('live variant selection recalculates visible branches',()=>assert.equal(d.getElementById('context').value,live.value));
+ d.querySelector('[data-agent="marketing_allocator"]').click();
+ check('marketing expands its own checks',()=>{assert.ok(d.querySelector('[data-rule="exposure"]'));assert.ok(d.querySelector('[data-rule="cooldown"]'));});
+ d.querySelector('[data-agent="product_verdict"]').click();
+ check('verdict shows reviews, supply and diagnosis branches',()=>{for(const id of ['reviews','supply','funnel'])assert.ok(d.querySelector('[data-rule="'+id+'"]'));});
+ const p=d.getElementById('context');p.value='p_mug';p.dispatchEvent(new w.Event('change',{bubbles:true}));
+ check('site defect remains FIX_SITE',()=>assert.ok(d.getElementById('outcome').textContent.includes('FIX_SITE')));
+ const p2=d.getElementById('context');p2.value='p_candle';p2.dispatchEvent(new w.Event('change',{bubbles:true}));
+ check('kill requires human approval',()=>assert.ok(d.getElementById('outcome').textContent.includes('Wait for human approval')));
+ d.getElementById('replay').click();
+ check('replay identifies its recorded timestamp and mode',()=>assert.ok(d.getElementById('notice').textContent.includes('RECORDED RUN')));
+ d.getElementById('replay').click();
+ check('replay stops on request',()=>assert.equal(d.getElementById('replay').textContent,'Replay last run'));
+ d.getElementById('view-shop').click();
+ check('switching back preserves the shop iframe',()=>{assert.equal(d.getElementById('shop-view').hidden,false);assert.equal(d.getElementById('shop-frame').src,'http://localhost:8000/dk/store');});
+ dom.window.close();console.log(count+' simplified demo checks passed');
+})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Halden Control Room</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f8cff'/%3E%3Cg stroke='%2305101f' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M7 11h5m5 0h8M7 16h10m5 0h3M7 21h5m5 0h8'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">Halden <small>Control Room</small></div>
+  <span class="pill" id="p-provider">model …</span>
+  <span class="pill" id="p-queue">queue …</span>
+  <span class="pill" id="p-cost">cost …</span>
+  <span class="spacer"></span>
+  <button class="sm" id="b-reorder">Reorder</button>
+  <button class="sm" id="b-marketing">Marketing</button>
+  <button class="sm" id="b-verdict">Verdict</button>
+  <button class="sm present-exit" style="display:none">Exit presenter</button>
+  <button class="sm" id="b-present">Presenter</button>
+  <button class="sm" id="b-model">Train models</button>
+  <button class="primary" id="b-run">Run full cycle</button>
+  <button class="sm" id="b-reset" title="Wipe and reseed 90 days of history">Reset</button>
+</header>
+
+<div class="shell">
+  <nav id="nav">
+    <h6>Present</h6>
+    <a data-tab="story" data-present="1">Presenter mode</a>
+    <h6>Operations</h6>
+    <a data-tab="overview" class="on">Overview</a>
+    <a data-tab="reorder">Reorder <span class="count" id="c-reorder"></span></a>
+    <a data-tab="marketing">Marketing <span class="count" id="c-marketing"></span></a>
+    <a data-tab="portfolio">Portfolio <span class="count" id="c-portfolio"></span></a>
+    <h6>Control</h6>
+    <a data-tab="approvals">Approvals <span class="count" id="c-approvals"></span></a>
+    <a data-tab="ledger">Ledger <span class="count" id="c-ledger"></span></a>
+    <a data-tab="anomalies">Anomalies <span class="count" id="c-anomalies"></span></a>
+    <h6>Explain</h6>
+    <a data-tab="decide">How it decides</a>
+    <h6>Modelling</h6>
+    <a data-tab="models">Models <span class="count" id="c-models"></span></a>
+    <h6>Agent</h6>
+    <a data-tab="ask">Ask the agent</a>
+    <a data-tab="runs">Agent runs</a>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<footer>
+  <div class="logbar">
+    <span class="dot" id="log-dot"></span>
+    <span class="t">Event log</span>
+    <div class="chips" id="log-chips"></div>
+    <span class="spacer"></span>
+    <button class="sm" id="b-expand">Expand</button>
+    <button class="sm" id="b-clear">Clear view</button>
+  </div>
+  <div id="log"></div>
+</footer>
+
+<div class="modal" id="modal"><div class="inner">
+  <div class="hd"><h3 id="modal-title">Evidence</h3><button class="sm" id="modal-close">Close</button></div>
+  <div id="modal-body"></div>
+</div></div>
+
+<script src="/ui/app.js"></script>
+</body>
+</html>

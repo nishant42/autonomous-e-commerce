@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Halden Home Control Room</title>
+<meta name="description" content="Dashboard for the autonomous AI-operated premium linen company architecture.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js"></script>
+<style>
+  .dash { max-width: 1240px; margin: 0 auto; padding: 32px 32px 80px; display: grid; gap: 40px; }
+  .hero {
+    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; align-items: stretch;
+  }
+  .hero-copy { padding: 18px 0 8px; display: flex; flex-direction: column; justify-content: center; }
+  .hero-copy h1 { font-size: clamp(34px, 4.6vw, 58px); line-height: 1.02; letter-spacing: -.035em; margin-bottom: 16px; }
+  .hero-copy h1 em { font-style: normal; color: var(--accent); }
+  .hero-copy p { font-size: 17px; color: var(--fg-muted); max-width: 56ch; }
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 9px; height: 44px; padding: 0 18px; border-radius: 11px; font-weight: 600; font-size: 14.5px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg); transition: transform .15s, box-shadow .15s, border-color .15s; }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); box-shadow: var(--shadow-lift); border-color: var(--border-strong); }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .btn svg { width: 16px; height: 16px; }
+
+  .console {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow);
+    display: grid; grid-template-rows: auto auto 1fr; overflow: hidden; min-width: 0;
+  }
+  .console-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; color: var(--fg-muted); }
+  .console-head .live { display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 600; }
+  .console-head .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 2s infinite; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .console-head .clock { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
+  .kpi { padding: 14px 16px; border-right: 1px solid var(--border); min-width: 0; }
+  .kpi:last-child { border-right: 0; }
+  .kpi .v { font-family: var(--display); font-weight: 650; font-size: 23px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: 11.5px; color: var(--fg-faint); }
+  .kpi .v.ok { color: var(--ok); }
+  .feed { list-style: none; margin: 0; padding: 6px 0; font-size: 13px; overflow: hidden; max-height: 290px; }
+  .feed li { display: grid; grid-template-columns: 58px 132px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 16px; border-bottom: 1px dashed var(--border); }
+  .feed li:last-child { border-bottom: 0; }
+  .feed .t { font-family: var(--mono); font-size: 11.5px; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+  .feed .who { font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .feed .what { color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .feed li.new { animation: slideIn .45s cubic-bezier(.2,.7,.2,1); }
+  @keyframes slideIn { from { transform: translateY(-10px); background: var(--accent-soft); } to { transform: none; background: transparent; } }
+  .tier { font-family: var(--mono); font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 99px; }
+  .tier.T0, .tier.T1 { background: var(--ok-soft); color: var(--ok); }
+  .tier.T2 { background: var(--warn-soft); color: var(--warn); }
+  .tier.T3 { background: var(--danger-soft); color: var(--danger); }
+  .tier.EV { background: var(--accent-soft); color: var(--accent); }
+
+  .envelope { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 18px; align-items: center; }
+  .env-bar { display: flex; height: 12px; border-radius: 99px; overflow: hidden; background: var(--bg-sunk); }
+  .env-bar span { display: block; height: 100%; }
+  .env-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--fg-muted); }
+  .env-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: 0; }
+
+  .sec-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .sec-head h2 { margin: 0; font-size: 22px; }
+  .sec-head p { margin: 2px 0 0; color: var(--fg-faint); font-size: 13.5px; }
+
+  .features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .feature {
+    position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 16px; align-items: center;
+    padding: 22px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg); overflow: hidden;
+    transition: transform .2s, box-shadow .2s, border-color .2s;
+  }
+  .feature:hover { text-decoration: none; transform: translateY(-2px); box-shadow: var(--shadow-lift); border-color: var(--accent); }
+  .feature .kicker { font-family: var(--mono); font-size: 11px;  color: var(--flax); }
+  .feature h3 { margin: 6px 0 6px; font-size: 22px; }
+  .feature p { margin: 0 0 12px; color: var(--fg-muted); font-size: 14px; }
+  .feature .go { font-weight: 600; color: var(--accent); font-size: 14px; }
+  .feature svg.preview { width: 100%; height: auto; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .search { position: relative; }
+  .search input { height: 38px; width: 260px; max-width: 100%; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg); padding: 0 12px 0 34px; font: inherit; font-size: 14px; }
+  .search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .search svg { position: absolute; left: 11px; top: 11px; width: 16px; height: 16px; color: var(--fg-faint); }
+  .chip { height: 34px; padding: 0 13px; border-radius: 99px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg-muted); font: inherit; font-size: 13px; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .tile {
+    display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 14px; border: 1px solid var(--border);
+    background: var(--bg-elev); color: var(--fg); transition: transform .18s, box-shadow .18s, border-color .18s; min-height: 150px;
+  }
+  .tile:hover { text-decoration: none; transform: translateY(-2px); box-shadow: var(--shadow-lift); border-color: var(--accent); }
+  .tile .top { display: flex; align-items: center; gap: 10px; }
+  .tile .ic { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+  .tile.deep .ic { background: var(--flax-soft); color: var(--flax); }
+  .tile .ic svg { width: 18px; height: 18px; }
+  .tile .num { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--fg-faint); }
+  .tile h4 { margin: 0; font-family: var(--display); font-size: 16px; font-weight: 650; line-height: 1.25; }
+  .tile p { margin: 0; font-size: 13px; color: var(--fg-muted); line-height: 1.5; }
+  .tile .meta { margin-top: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .tile .meta span { font-size: 11px; font-family: var(--mono); color: var(--fg-faint); border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; }
+  .empty { color: var(--fg-faint); font-size: 14px; padding: 20px 0; }
+
+  @media (max-width: 1000px) { .hero, .features { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 640px) {
+    .dash { padding: 20px 16px 60px; }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kpi:nth-child(2) { border-right: 0; }
+    .kpi:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+    .feed li { grid-template-columns: 48px minmax(0, 1fr) auto; }
+    .feed .what { display: none; }
+    .feature { grid-template-columns: minmax(0, 1fr); }
+    .feature svg.preview { display: none; }
+    .envelope { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body data-app>
+<main>
+<div class="dash">
+
+  <section class="hero">
+    <div class="hero-copy enter">
+      <div class="eyebrow">Architecture case study for a premium linen brand</div>
+      <h1>A linen company that <em>runs itself</em>.</h1>
+      <p>Thirty-one AI agents sell, buy, price, serve and reconcile. Humans set the limits and see only exceptions.</p>
+      <div class="cta">
+        <a class="btn primary" href="store.html"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Open the live store</a>
+        <a class="btn" href="brief.html">Read the brief</a>
+      </div>
+    </div>
+
+    <div class="console enter" aria-label="Example activity feed">
+      <div class="console-head"><span class="live">Sample feed</span><span>ops-ledger / actions</span><span class="clock" id="clock">09:14:03</span></div>
+      <div class="kpis">
+        <div class="kpi"><div class="v ok" id="k-auto">99.4%</div><div class="l">decisions without a human</div></div>
+        <div class="kpi"><div class="v" id="k-actions">12,418</div><div class="l">actions today</div></div>
+        <div class="kpi"><div class="v">31</div><div class="l">agents on duty</div></div>
+        <div class="kpi"><div class="v" id="k-t3">2</div><div class="l">owner exceptions</div></div>
+      </div>
+      <ul class="feed" id="feed"></ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><div><h2>Autonomy envelope</h2><p>Share of actions by risk tier: how much the agents do alone vs with a verifier or an owner.</p></div></div>
+    <div class="envelope">
+      <div class="env-bar" role="img" aria-label="T0 90 percent, T1 8 percent, T2 1.5 percent, T3 0.5 percent">
+        <span style="width:90%;background:var(--ok)"></span><span style="width:8%;background:color-mix(in srgb, var(--ok) 55%, var(--bg-elev))"></span><span style="width:1.5%;background:var(--warn)"></span><span style="width:.5%;background:var(--danger)"></span>
+      </div>
+      <a class="icon-btn" href="security.html">How tiers work →</a>
+      <div class="env-legend">
+        <span><i style="background:var(--ok)"></i>T0 auto · 90%</span>
+        <span><i style="background:color-mix(in srgb, var(--ok) 55%, var(--bg-elev))"></i>T1 auto + audit · 8%</span>
+        <span><i style="background:var(--warn)"></i>T2 verifier / panel · 1.5%</span>
+        <span><i style="background:var(--danger)"></i>T3 owner · &lt; 0.5%</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><div><h2>Interactive</h2><p>See the system move.</p></div></div>
+    <div class="features">
+      <a class="feature" href="store.html" style="grid-column:1/-1">
+        <div>
+          <div class="kicker">Live store · start here</div>
+          <h3>Watch shoppers buy while the company runs itself</h3>
+          <p>A working storefront with simulated shoppers, and you can buy too. Stock falls, agents end promotions, pause ads, raise purchase orders, trucks arrive, backorders release and the support agent answers customers, all live. Turn on "Show what the agents see" to read stock, cover and ad status on every product.</p>
+          <span class="go">Open live store →</span>
+        </div>
+        <svg class="preview" viewBox="0 0 210 140" aria-hidden="true">
+          <g fill="var(--bg-sunk)" stroke="var(--border-strong)"><rect x="10" y="14" width="56" height="48" rx="7"/><rect x="76" y="14" width="56" height="48" rx="7"/><rect x="142" y="14" width="56" height="48" rx="7"/></g>
+          <g fill="var(--flax-soft)" stroke="var(--flax)"><rect x="12" y="96" width="30" height="16" rx="3"><animate attributeName="x" values="12;160;12" dur="6s" repeatCount="indefinite"/></rect></g>
+          <path d="M20 118 H 190" stroke="var(--border-strong)" stroke-dasharray="6 5"/>
+          <circle r="7" fill="var(--accent)"><animateMotion dur="3s" repeatCount="indefinite" path="M30 138 C 60 90, 100 60, 104 40 S 180 10, 196 8"/></circle>
+          <circle r="7" fill="var(--ok)"><animateMotion dur="3.6s" begin="1.2s" repeatCount="indefinite" path="M170 138 C 150 100, 60 70, 38 40 S 180 10, 196 8"/></circle>
+        </svg>
+      </a>
+      <a class="feature" href="forecast-lab.html">
+        <div>
+          <div class="kicker">Forecast Lab</div>
+          <h3>Run the forecasting pipeline yourself</h3>
+          <p>Segmentation, model portfolio, backtest gate, reconciliation, calibration and a 5,000-draw purchase decision, all computed live. Change the product or service level and watch the PO tier change.</p>
+          <span class="go">Open Forecast Lab →</span>
+        </div>
+        <svg class="preview" viewBox="0 0 210 140" aria-hidden="true">
+          <path d="M10 110 L40 96 L70 102 L100 84" fill="none" stroke="var(--fg-faint)" stroke-width="2"/>
+          <path d="M100 84 L130 60 L160 70 L200 50 L200 100 L160 110 L130 104 L100 84Z" fill="var(--accent-soft)" stroke="var(--accent)"><animate attributeName="opacity" values=".5;1;.5" dur="3s" repeatCount="indefinite"/></path>
+          <path d="M100 84 L130 82 L160 90 L200 75" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+          <line x1="100" y1="20" x2="100" y2="125" stroke="var(--flax)" stroke-dasharray="4 4"/>
+        </svg>
+      </a>
+      <a class="feature" href="simulate.html">
+        <div>
+          <div class="kicker">Live operations</div>
+          <h3>Press start and watch the company work</h3>
+          <p>Orders stream in, a towel suddenly sells 3× faster, and every agent reacts in sequence while the ledger, stock and cash update live. Inject a supplier delay, a rogue pricing agent or a kill switch.</p>
+          <span class="go">Open simulation →</span>
+        </div>
+        <svg class="preview" viewBox="0 0 210 140" aria-hidden="true">
+          <g stroke="var(--border-strong)" stroke-width="1.5" fill="none">
+            <path id="p1" d="M30 30 C 90 30, 90 70, 150 70"/><path id="p2" d="M30 110 C 90 110, 90 70, 150 70"/><path id="p3" d="M150 70 C 170 70, 180 30, 190 30"/>
+          </g>
+          <g fill="var(--bg-sunk)" stroke="var(--accent)" stroke-width="1.5">
+            <rect x="8" y="18" width="44" height="24" rx="6"/><rect x="8" y="98" width="44" height="24" rx="6"/><rect x="128" y="56" width="44" height="28" rx="7" stroke="var(--flax)"/><rect x="178" y="18" width="26" height="24" rx="6"/>
+          </g>
+          <circle r="4" fill="var(--accent)"><animateMotion dur="2.2s" repeatCount="indefinite"><mpath href="#p1"/></animateMotion></circle>
+          <circle r="4" fill="var(--flax)"><animateMotion dur="2.8s" begin=".7s" repeatCount="indefinite"><mpath href="#p2"/></animateMotion></circle>
+          <circle r="4" fill="var(--ok)"><animateMotion dur="1.6s" begin=".3s" repeatCount="indefinite"><mpath href="#p3"/></animateMotion></circle>
+        </svg>
+      </a>
+      <a class="feature" href="canvas.html">
+        <div>
+          <div class="kicker">Architecture canvas</div>
+          <h3>Drag boxes, bend lines, click for detail</h3>
+          <p>Four editable views: company domains, platform HLD, agent hierarchy and the procurement loop. Rearrange them for your walkthrough, animate the data flow and export as SVG.</p>
+          <span class="go">Open canvas →</span>
+        </div>
+        <svg class="preview" viewBox="0 0 210 140" aria-hidden="true">
+          <g stroke="var(--fg-faint)" stroke-width="1.5" fill="none" stroke-dasharray="4 4">
+            <path d="M52 34 Q 100 10 120 60"><animate attributeName="d" values="M52 34 Q 100 10 120 60;M52 34 Q 70 80 120 60;M52 34 Q 100 10 120 60" dur="5s" repeatCount="indefinite"/></path>
+            <path d="M150 74 L 170 110"/>
+          </g>
+          <g stroke="var(--accent)" stroke-width="1.5" fill="var(--accent-soft)">
+            <rect x="10" y="22" width="44" height="24" rx="6"/>
+            <rect x="112" y="52" width="52" height="26" rx="6"><animateTransform attributeName="transform" type="translate" values="0 0;6 -4;0 0" dur="5s" repeatCount="indefinite"/></rect>
+            <rect x="150" y="104" width="50" height="24" rx="6"/>
+          </g>
+          <path d="M150 58 l10 10 -4 1 3 6 -2 1 -3 -6 -4 3z" fill="var(--fg)"><animateTransform attributeName="transform" type="translate" values="0 0;6 -4;0 0" dur="5s" repeatCount="indefinite"/></path>
+        </svg>
+      </a>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div><h2>Architecture documents</h2><p>Eleven sections answer the brief; eight deep dives show the production detail.</p></div>
+      <div class="toolbar">
+        <label class="search" for="q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="q" type="search" placeholder="Search: idempotency, OBO, supplier…" autocomplete="off"></label>
+        <button class="chip" type="button" data-f="all" aria-pressed="true">All</button>
+        <button class="chip" type="button" data-f="core" aria-pressed="false">Deliverable</button>
+        <button class="chip" type="button" data-f="deep" aria-pressed="false">Deep dives</button>
+      </div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <p class="empty" id="empty" hidden>Nothing matches that search. Try "limits", "EDI" or "cost".</p>
+  </section>
+
+  <footer class="site">Halden Home is fictional. The supplier relationship with Yves Delorme is hypothetical. Figures in the sample feed and simulation are illustrative.</footer>
+</div>
+</main>
+
+<script>
+(function () {
+  const I = {
+    domain: '<path d="M3 21h18M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/>',
+    agents: '<circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v4M12 11.5l-6 5M12 11.5l6 5"/>',
+    hld: '<rect x="3" y="3" width="18" height="5" rx="1.5"/><rect x="3" y="10" width="18" height="5" rx="1.5"/><rect x="3" y="17" width="18" height="4" rx="1.5"/>',
+    data: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    orch: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="12" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8.3 7.1l7.4 3.8M8.3 16.9l7.4-3.8"/>',
+    flows: '<path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/>',
+    security: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+    bvb: '<path d="M4 7h16l-1.5 12H5.5z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/>',
+    stack: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+    trade: '<path d="M12 3v18M5 7h14M7 7l-3 7h6zM17 7l-3 7h6z"/>',
+    scenario: '<path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/>',
+    harness: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/>',
+    lld: '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>',
+    identity: '<circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M15 12v2"/>',
+    supplier: '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+    ground: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+    rel: '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/>',
+    eval: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    cost: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .9-3 2s1 1.7 3 2 3 .9 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6v2M12 16v2"/>',
+    overview: '<path d="M4 5h16M4 10h16M4 15h10M4 20h7"/>',
+  };
+  const T = [
+    ["diagrams.html", "★", "hld", "core", "Architecture diagrams", "Harness architecture, database schema and Azure (Entra ID to Foundry) on one page.", ["harness", "ERD", "Azure"]],
+    ["overview.html", "00", "overview", "core", "Overview & principles", "The design in six sentences, sizing assumptions and vocabulary.", ["principles", "sizing"]],
+    ["domain.html", "01", "domain", "core", "Company / domain architecture", "Nine departments as bounded contexts, who owns which data, where humans still sit.", ["1 diagram", "ownership table"]],
+    ["agents.html", "02", "agents", "core", "Agent hierarchy", "Every agent: what it does, what it reads, what it may do, and at which tier.", ["31 agents", "contracts"]],
+    ["hld.html", "03", "hld", "core", "Technical architecture (HLD)", "Six planes and one choke point for side effects. C4 context and container views.", ["3 diagrams", "decision"]],
+    ["data.html", "04", "data", "core", "Shared state & data", "Source-of-truth map, transactional outbox, event contracts, agent memory hygiene.", ["outbox", "CloudEvents"]],
+    ["orchestration.html", "05", "orch", "core", "Agent orchestration", "Choreography between domains, durable workflows within, maker-checker, panels.", ["2 diagrams", "6 patterns"]],
+    ["flows.html", "06", "flows", "core", "Procurement & marketing flows", "Demand → finance loop and the stock-aware marketing control loop.", ["3 diagrams", "PO states"]],
+    ["security.html", "07", "security", "core", "Security & failsafes", "Tiers, spend and refund limits, quarantine, kill switches, threat model.", ["limits", "kill switch"]],
+    ["build-vs-buy.html", "08", "bvb", "core", "Build vs buy", "Buy the plumbing, build the brain and the brakes.", ["Shopify", "Stripe", "3PL"]],
+    ["stack.html", "09", "stack", "core", "Technology stack", "Azure-centred, open at the seams. Model routing policy.", ["Foundry", "Temporal"]],
+    ["tradeoffs.html", "10", "trade", "core", "Key trade-offs", "Ten decisions that could have gone the other way, and when to revisit.", ["10 ADRs"]],
+    ["scenario.html", "11", "scenario", "core", "Scenario: towel sells 3×", "Minute-by-minute reaction across every department, with real numbers.", ["timeline", "Buy Panel"]],
+    ["harness.html", "A", "harness", "deep", "Agent harness", "Seven stages that turn a stateless model into a safe agent.", ["tool loop", "validation"]],
+    ["lld.html", "B", "lld", "deep", "Low-level design", "Ledger ERD, Action Proposal, gateway algorithm, idempotency, policy as code.", ["ERD", "OPA", "Temporal"]],
+    ["identity.html", "C", "identity", "deep", "Identity, secrets & runtime", "Per-agent identity, OBO, runtime secret resolution, keyless model access.", ["Entra", "OBO", "Key Vault"]],
+    ["suppliers.html", "D", "supplier", "deep", "Supplier integration ladder", "API, EDI, files, email and portal automation behind one canonical model.", ["EDI 850", "RPA"]],
+    ["grounding.html", "E", "ground", "deep", "Grounding & anti-hallucination", "Ten layers that make invented facts structurally hard.", ["citations", "verifier"]],
+    ["reliability.html", "F", "rel", "deep", "Reliability & recovery", "Retries, DLQs, degraded modes, replay and undo.", ["DR", "sagas"]],
+    ["evaluation.html", "G", "eval", "deep", "Evaluation & observability", "Golden sets, shadow and canary releases, SLOs, traces.", ["SLOs", "canary"]],
+    ["forecasting.html", "I", "scenario", "deep", "Forecasting & ML models", "LightGBM quantile, TSB, analog cold start, MinT, demand sensing, and every classifier.", ["P10/P50/P90", "newsvendor"]],
+    ["cost.html", "H", "cost", "deep", "Cost model & optimisation", "Indicative monthly run cost, token model, cost levers.", ["≈ $0.85 / order"]],
+  ];
+  const tiles = document.getElementById("tiles");
+  tiles.innerHTML = T.map(([href, n, ic, kind, title, desc, meta]) =>
+    '<a class="tile ' + kind + '" href="' + href + '" data-kind="' + kind + '" data-text="' + (title + " " + desc + " " + meta.join(" ")).toLowerCase() + '">' +
+    '<div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + I[ic] + '</svg></span><span class="num">' + n + "</span></div>" +
+    "<h4>" + title + "</h4><p>" + desc + '</p><div class="meta">' + meta.map((m) => "<span>" + m + "</span>").join("") + "</div></a>").join("");
+
+  const q = document.getElementById("q"), empty = document.getElementById("empty");
+  let filter = "all";
+  function apply() {
+    const s = q.value.trim().toLowerCase();
+    let shown = 0;
+    tiles.querySelectorAll(".tile").forEach((t) => {
+      const ok = (filter === "all" || t.dataset.kind === filter) && (!s || t.dataset.text.includes(s));
+      t.hidden = !ok; if (ok) shown++;
+    });
+    empty.hidden = shown > 0;
+  }
+  q.addEventListener("input", apply);
+  document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => {
+    filter = c.dataset.f;
+    document.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", String(x === c)));
+    apply();
+  }));
+
+  // Sample activity feed (illustrative)
+  const EV = [
+    ["Order Orchestrator", "Released order #48213 to 3PL UK1", "T0"],
+    ["Fraud Screening", "Cleared order #48214 · Radar 12", "T0"],
+    ["Care · Resolution", "Answered WISMO for #48190 with carrier ETA", "T1"],
+    ["Pricing Agent", "Ended promo on Étoile bath towel (cover 2.6 d)", "T0"],
+    ["Demand Sensing", "Velocity 3.1× plan on Étoile bath towel", "EV"],
+    ["Procurement", "PO 180 units → Buy Panel (anomaly-driven)", "T2"],
+    ["Supplier Liaison", "EDI 850 sent · 997 received in 42 s", "T0"],
+    ["Budget Allocator", "Moved €140/day to Nuit sheet set", "T0"],
+    ["Reconciliation", "Matched 312 Stripe charges to payout po_7Q2", "T0"],
+    ["Doc Extractor", "Parsed confirmation PDF · 6 fields verified", "T1"],
+    ["Lifecycle Agent", "Back-in-stock flow queued for 212 waitlisters", "T0"],
+    ["Accounts Payable", "3-way match OK · invoice INV-8812 scheduled", "T0"],
+    ["Sentinel", "Refund ratio 0.8% · within envelope", "EV"],
+    ["Price Guard", "Vetoed −60% proposal: below margin floor", "T2"],
+    ["Owner inbox", "New payee bank details · call-back required", "T3"],
+  ];
+  const feed = document.getElementById("feed");
+  let clock = 9 * 3600 + 14 * 60 + 3, i = 0, actions = 12418;
+  const fmt = (s) => [Math.floor(s / 3600) % 24, Math.floor(s / 60) % 60, s % 60].map((x) => String(x).padStart(2, "0")).join(":");
+  function push(animate) {
+    const [who, what, tier] = EV[i++ % EV.length];
+    clock += 7 + Math.floor(Math.random() * 40);
+    const li = document.createElement("li");
+    if (animate) li.className = "new";
+    li.innerHTML = '<span class="t">' + fmt(clock).slice(0, 5) + '</span><span class="who">' + who + '</span><span class="what" title="' + what + '">' + what + '</span><span class="tier ' + tier + '">' + (tier === "EV" ? "event" : tier) + "</span>";
+    feed.prepend(li);
+    while (feed.children.length > 8) feed.lastChild.remove();
+    document.getElementById("clock").textContent = fmt(clock);
+    actions += 3 + Math.floor(Math.random() * 9);
+    document.getElementById("k-actions").textContent = actions.toLocaleString("en-GB");
+  }
+  for (let k = 0; k < 8; k++) push(false);
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!reduce) setInterval(() => push(true), 2200);
+})();
+</script>
+</body>
+</html>

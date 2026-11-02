@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The system, running</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f8cff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/ui/style.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; }
+  .top { display: flex; align-items: center; gap: 10px; padding: 10px 18px; background: var(--bg-1);
+         border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .stage { position: relative; overflow: hidden; background:
+           radial-gradient(900px 500px at 50% 35%, #0e141c 0%, var(--bg) 70%); }
+  svg { width: 100%; height: 100%; display: block; }
+  .nd rect, .nd circle { transition: filter .25s, stroke .25s; }
+  .nd .plate { fill: var(--bg-1); stroke: var(--line); stroke-width: 1.2; }
+  .nd.hot .plate { stroke: var(--accent); filter: drop-shadow(0 0 12px rgba(79,140,255,.55)); }
+  .nd.ok .plate { stroke: var(--ok); filter: drop-shadow(0 0 12px rgba(63,185,80,.5)); }
+  .nd.bad .plate { stroke: var(--bad); filter: drop-shadow(0 0 12px rgba(248,81,73,.5)); }
+  .nd .ttl { fill: var(--fg); font: 600 13px var(--sans); }
+  .nd .sub { fill: var(--fg-3); font: 10.5px var(--mono); }
+  .nd .num { fill: var(--fg); font: 700 15px var(--mono); }
+  .nd { cursor: pointer; }
+  .edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+  .edge.live { stroke: var(--line-2); }
+  .pk { r: 3.4; }
+  .pk.read { fill: #6ea8ff; } .pk.engine { fill: #4fd1c5; } .pk.model { fill: #3fb950; }
+  .pk.rule { fill: #d29922; } .pk.gateway { fill: #f85149; } .pk.judgment { fill: #c084fc; }
+  .pk.order { fill: #ffffff; }
+  .lab { fill: var(--fg-3); font: 10px var(--mono); }
+  .ticker { display: flex; align-items: center; gap: 12px; padding: 9px 18px; background: var(--bg-1);
+            border-top: 1px solid var(--line); font: 12px var(--mono); min-height: 42px; }
+  .ticker .kind { font: 600 9.5px var(--sans); letter-spacing: .09em; text-transform: uppercase;
+                  padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line-2); }
+  .panel { position: absolute; right: 16px; top: 16px; width: 330px; max-height: calc(100% - 32px);
+           overflow: auto; background: rgba(13,17,22,.96); border: 1px solid var(--line-2);
+           border-radius: 12px; padding: 15px 17px; display: none; backdrop-filter: blur(8px); }
+  .panel.on { display: block; }
+  .panel h3 { margin: 0 0 4px; font-size: 15px; }
+  .panel .role { color: var(--fg-3); font-size: 12px; margin-bottom: 10px; }
+  .panel p { font-size: 13px; line-height: 1.6; color: var(--fg-2); margin: 0 0 10px; }
+  .panel .st { display: flex; justify-content: space-between; font: 11.5px var(--mono);
+               padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .panel .st b { color: var(--fg); }
+  .speed { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-3); }
+  input[type=range] { width: 110px; accent-color: var(--accent); }
+  .hfbox { font-size: 12px; color: var(--fg-2); }
+  .hfbox .bar { height: 8px; background: var(--bg-3); border-radius: 3px; overflow: hidden; margin: 4px 0 9px; }
+  .hfbox .bar i { display: block; height: 100%; background: var(--bad); }
+  .hfbox .bar i.good { background: var(--ok); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand">Halden <small>the system, running</small></div>
+  <span class="pill" id="shoppill">shop…</span>
+  <span class="pill" id="provpill">model…</span>
+  <span class="spacer" style="flex:1"></span>
+  <div class="speed">speed <input type="range" id="speed" min="1" max="12" value="5"></div>
+  <button class="sm" id="b-replay">Replay last run</button>
+  <button class="primary" id="b-run">Run it for real</button>
+  <a class="btn" href="/flow" style="text-decoration:none;padding:7px 11px">Step by step</a>
+  <a class="btn" href="/ui/agents-guide.html" style="text-decoration:none;padding:7px 11px">Explain the 3 agents</a>
+  <a class="btn" href="/explain" style="text-decoration:none;padding:7px 11px">Inside the decisions</a>
+  <a class="btn" href="/console" style="text-decoration:none;padding:7px 11px">Console</a>
+</div>
+
+<div class="stage" id="stage">
+  <svg id="svg" viewBox="0 0 1600 760" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="panel" id="panel"></div>
+</div>
+
+<div class="ticker" id="ticker"><span class="muted">Press <b>Run it for real</b> and watch the work move.</span></div>
+
+<script src="/ui/live.js"></script>
+</body>
+</html>

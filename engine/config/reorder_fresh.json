@@ -1,0 +1,35 @@
+{
+  "agent": "reorder",
+  "version": 7,
+  "_note": "Same agent, same engines, same gateway. A supermarket's fresh aisle differs from durable goods by this file and nothing else.",
+  "model": {
+    "plan": "claude-sonnet-5-5",
+    "extract": "claude-haiku-5-5",
+    "max_steps": 40,
+    "token_budget_month": 1200000
+  },
+  "reads": [
+    "sales_panel",
+    "availability_history",
+    "lost_demand_signals",
+    "returns_by_variant",
+    "supplier_terms",
+    "open_orders",
+    "cash_position",
+    "economics",
+    "compute_quantities"
+  ],
+  "writes": [
+    "propose_reorder",
+    "raise_anomaly"
+  ],
+  "policy": {
+    "review_period_days": 1,
+    "shelf_life_days": 7,
+    "cover_cap_weeks": 0.7,
+    "min_history_days": 14,
+    "markdown_curve": "linear_from_day_1",
+    "intended_discount_pct": 0,
+    "substitution_group_aware": true
+  }
+}

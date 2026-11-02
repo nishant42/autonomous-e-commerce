@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Halden Live Store</title>
+<meta name="description" content="A simulated Halden Home storefront with the autonomous back office reacting live.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js"></script>
+<style>
+  .ls { max-width: 1520px; margin: 0 auto; padding: 16px 20px 60px; display: grid; gap: 14px; }
+  .ls-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  .ls-head h1 { font-size: 25px; margin: 0; }
+  .ls-head p { margin: 2px 0 0; color: var(--fg-muted); font-size: 13.5px; }
+  .ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+  .seg { display: flex; gap: 3px; padding: 3px; border-radius: 11px; background: var(--bg-sunk); border: 1px solid var(--border); }
+  .seg button { height: 32px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: var(--fg-muted); font: inherit; font-size: 13px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--bg-elev); color: var(--fg); box-shadow: var(--shadow); }
+  .play { height: 40px; padding: 0 18px; border-radius: 11px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 600; font-size: 14.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .play svg { width: 15px; height: 15px; }
+  .inj { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg-muted); font: inherit; font-size: 13px; cursor: pointer; }
+  .inj:hover { color: var(--fg); border-color: var(--border-strong); }
+  .inj.kill { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); font-weight: 600; }
+  .inj.kill[aria-pressed="true"] { background: var(--danger); color: var(--bg-elev); }
+  .clock { font-family: var(--mono); font-size: 12.5px; color: var(--fg-muted); padding: 0 10px; border-left: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  .clock b { font-family: var(--display); font-size: 18px; color: var(--fg); margin-left: 4px; }
+
+  .split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+
+  /* ---------------- storefront (the shop's own look: quiet, editorial) ---------------- */
+  .shop { position: relative; border-radius: 16px; overflow: hidden; border: 1px solid var(--border); background: var(--bg-elev); box-shadow: var(--shadow); }
+  .shop-tag { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; font-family: var(--mono); font-size: 10.5px;  background: var(--fg); color: var(--bg); padding: 3px 10px; border-radius: 99px; }
+  .shop-nav { display: flex; align-items: center; gap: 20px; padding: 32px 22px 14px; border-bottom: 1px solid var(--border); }
+  .shop-logo { font-family: var(--display); font-weight: 760; letter-spacing: .18em; font-size: 17px; }
+  .shop-nav nav { display: flex; gap: 16px; font-size: 13px; color: var(--fg-muted); }
+  .shop-nav .sp { flex: 1; }
+  .xray { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-muted); cursor: pointer; user-select: none; }
+  .xray input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .bag { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+  .bag svg { width: 20px; height: 20px; }
+  .bag .n { min-width: 20px; height: 20px; border-radius: 99px; background: var(--accent); color: var(--accent-fg); font-size: 11px; display: grid; place-items: center; padding: 0 5px; transition: transform .2s; }
+  .bag.bump .n { transform: scale(1.35); }
+  .banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 22px; background: var(--flax-soft); color: var(--fg); font-size: 13px; }
+  .banner b { font-family: var(--display); font-size: 15px; }
+  .grid-p { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 18px 22px 22px; }
+  .pc { position: relative; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .pc .img { position: relative; aspect-ratio: 4 / 3.4; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); transition: transform .25s, box-shadow .25s; max-width: 100%; }
+  .pc.hot .img { transform: translateY(-3px); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-lift); }
+  .pc .badge { position: absolute; left: 8px; top: 8px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--bg-elev); color: var(--fg); box-shadow: var(--shadow); }
+  .pc .badge.low { color: var(--warn); } .pc .badge.out { color: var(--danger); } .pc .badge.new { color: var(--ok); } .pc .badge.sale { color: var(--accent); }
+  .pc .name { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+  .pc .by { font-size: 11.5px; color: var(--fg-faint); }
+  .pc .price { font-family: var(--display); font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .pc .price s { color: var(--fg-faint); font-size: 13px; font-weight: 400; margin-left: 4px; }
+  .pc .price.flash { animation: pflash 1.2s; }
+  @keyframes pflash { 0%, 40% { color: var(--flax); } }
+  .pc .buy { height: 34px; border-radius: 9px; border: 1px solid var(--fg); background: var(--fg); color: var(--bg); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .pc .buy:hover { opacity: .88; }
+  .pc .buy.pre { background: var(--bg-elev); color: var(--fg); }
+  .pc .xr { display: none; font-family: var(--mono); font-size: 10.5px; color: var(--fg-muted); background: var(--bg-sunk); border: 1px dashed var(--border-strong); border-radius: 8px; padding: 6px 8px; line-height: 1.55; }
+  .shop.x .pc .xr { display: block; }
+  .xr .bar { height: 5px; border-radius: 99px; background: var(--border); overflow: hidden; margin: 3px 0; }
+  .xr .bar i { display: block; height: 100%; border-radius: 99px; transition: width .5s, background .3s; }
+  .xr .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+  .xr .chips span { border-radius: 5px; padding: 0 5px; background: var(--bg-elev); border: 1px solid var(--border); }
+  .xr .chips .off { color: var(--danger); } .xr .chips .on { color: var(--ok); }
+
+  /* textile swatches (no photos: woven patterns drawn in CSS) */
+  .sw-terry-white { background: radial-gradient(circle at 30% 30%, #fff 0 1.6px, transparent 2px) 0 0 / 6px 6px, radial-gradient(circle at 70% 70%, #e9e6df 0 1.6px, transparent 2px) 0 0 / 6px 6px, linear-gradient(160deg, #fbfaf7, #e8e4db); }
+  .sw-terry-stone { background: radial-gradient(circle at 30% 30%, #d9d1c3 0 1.6px, transparent 2px) 0 0 / 6px 6px, radial-gradient(circle at 70% 70%, #bfb4a2 0 1.6px, transparent 2px) 0 0 / 6px 6px, linear-gradient(160deg, #d8cfbf, #b9ad98); }
+  .sw-sateen { background: repeating-linear-gradient(90deg, #2c3a6e 0 3px, #34437d 3px 5px), linear-gradient(#2c3a6e, #1d2750); background-blend-mode: overlay; }
+  .sw-percale { background: repeating-linear-gradient(0deg, rgba(255,255,255,.35) 0 1px, transparent 1px 4px), repeating-linear-gradient(90deg, rgba(0,0,0,.05) 0 1px, transparent 1px 4px), linear-gradient(160deg, #eef0f5, #d7dbe6); }
+  .sw-flax { background: repeating-linear-gradient(45deg, #c9a765 0 4px, #b8924d 4px 8px), repeating-linear-gradient(-45deg, rgba(255,255,255,.15) 0 4px, transparent 4px 8px); background-blend-mode: soft-light; }
+  .sw-waffle { background: linear-gradient(90deg, rgba(0,0,0,.07) 1px, transparent 1px) 0 0 / 10px 10px, linear-gradient(rgba(0,0,0,.07) 1px, transparent 1px) 0 0 / 10px 10px, radial-gradient(circle at 50% 50%, #f6f3ee 0 3px, #e7e1d6 4px) 0 0 / 10px 10px; }
+  .fold { position: absolute; inset: auto 12% 14% 12%; height: 30%; border-radius: 8px; background: rgba(255,255,255,.18); box-shadow: 0 -6px 0 rgba(0,0,0,.05), 0 -12px 0 rgba(255,255,255,.12); }
+
+  .shoppers { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  .shopper { position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 10.5px; font-weight: 700; color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,.25); transition: transform .9s cubic-bezier(.3,.7,.2,1), opacity .4s; }
+  .shopper.you { outline: 3px solid var(--flax); }
+  .shopper .say { position: absolute; left: 32px; top: -4px; white-space: nowrap; font-size: 11px; font-weight: 600; color: var(--fg); background: var(--bg-elev); border: 1px solid var(--border); padding: 2px 7px; border-radius: 8px; box-shadow: var(--shadow); }
+
+  .chat { position: absolute; right: 14px; bottom: 14px; width: 300px; max-width: calc(100% - 28px); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lift); z-index: 7; overflow: hidden; transition: transform .3s, opacity .3s; }
+  .chat.idle { transform: translateY(8px); opacity: .92; }
+  .chat-h { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; }
+  .chat-h i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .chat-h span { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint); font-weight: 400; }
+  .chat-b { padding: 10px 12px; display: grid; gap: 6px; min-height: 64px; max-height: 190px; overflow: auto; }
+  .msg { max-width: 88%; font-size: 12.5px; line-height: 1.4; padding: 6px 9px; border-radius: 10px; animation: msgIn .35s ease-out; }
+  @keyframes msgIn { from { transform: translateY(4px); opacity: 0; } }
+  .msg.c { background: var(--bg-sunk); justify-self: start; }
+  .msg.a { background: var(--accent); color: var(--accent-fg); justify-self: end; }
+  .msg .cite { display: block; font-family: var(--mono); font-size: 10px; opacity: .8; margin-top: 3px; }
+  .typing { justify-self: end; font-size: 11px; color: var(--fg-faint); font-style: italic; }
+
+  /* ---------------- back office ---------------- */
+  .ops { display: grid; gap: 12px; min-width: 0; }
+  .box { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow); min-width: 0; }
+  .box h3 { margin: 0 0 10px; font-family: var(--mono); font-size: 11.5px; font-weight: 600;  color: var(--fg-faint); display: flex; justify-content: space-between; gap: 8px; }
+  .kp { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .kp div { min-width: 0; }
+  .kp b { display: block; font-family: var(--display); font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; white-space: nowrap; }
+  .kp span { font-size: 11px; color: var(--fg-faint); }
+  .kp b.ok { color: var(--ok); }
+  .pipe { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+  .pipe div { background: var(--bg-sunk); border-radius: 9px; padding: 6px 8px; text-align: center; }
+  .pipe b { display: block; font-family: var(--display); font-size: 18px; font-variant-numeric: tabular-nums; }
+  .pipe span { font-size: 10.5px; color: var(--fg-faint); }
+  .orders { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .orders li { display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 12.5px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .orders li:last-child { border-bottom: 0; }
+  .orders .id { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); }
+  .orders .it { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st { font-family: var(--mono); font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--bg-sunk); color: var(--fg-muted); transition: background .3s, color .3s; }
+  .st.paid { background: var(--info-soft); color: var(--info); }
+  .st.released { background: var(--accent-soft); color: var(--accent); }
+  .st.shipped, .st.delivered { background: var(--ok-soft); color: var(--ok); }
+  .st.backorder { background: var(--warn-soft); color: var(--warn); }
+  .st.held { background: var(--danger-soft); color: var(--danger); }
+  .road { position: relative; height: 104px; margin: 4px 0 2px; }
+  .road .track { position: absolute; left: 54px; right: 54px; top: 50px; height: 4px; border-radius: 99px; background: repeating-linear-gradient(90deg, var(--border-strong) 0 10px, transparent 10px 18px); }
+  .road .end { position: absolute; top: 32px; width: 48px; text-align: center; font-size: 10.5px; color: var(--fg-muted); line-height: 1.2; }
+  .road .end svg { width: 22px; height: 22px; display: block; margin: 0 auto 2px; color: var(--fg-muted); }
+  .road .end.l { left: 0; } .road .end.r { right: 0; }
+  .truck { position: absolute; top: 20px; transform: translateX(-50%); transition: left .7s linear; display: grid; justify-items: center; }
+  .truck .tb { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 6px; background: var(--flax-soft); color: var(--flax); border: 1px solid color-mix(in srgb, var(--flax) 40%, transparent); white-space: nowrap; }
+  .truck svg { width: 26px; height: 20px; color: var(--flax); }
+  .truck.late .tb { background: var(--danger-soft); color: var(--danger); }
+  .none { font-size: 12.5px; color: var(--fg-faint); }
+  .feed { list-style: none; margin: 0; padding: 0; max-height: 330px; overflow: auto; }
+  .feed li { display: grid; grid-template-columns: 58px 124px minmax(0, 1fr) 52px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 12.5px; }
+  .feed li.new { animation: rowIn .6s ease-out; }
+  @keyframes rowIn { from { background: var(--accent-soft); } }
+  .feed .t { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+  .feed .a { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+  .feed .a i { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--kc); }
+  .feed .m { color: var(--fg-muted); min-width: 0; }
+  .tier { justify-self: end; font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+  .tier.T0, .tier.T1 { background: var(--ok-soft); color: var(--ok); }
+  .tier.T2 { background: var(--warn-soft); color: var(--warn); }
+  .tier.T3, .tier.HALT { background: var(--danger-soft); color: var(--danger); }
+
+  @media (max-width: 1150px) { .split { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 720px) {
+    .ls { padding: 12px 16px 50px; }
+    .grid-p { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px; gap: 10px; }
+    .shop-nav nav { display: none; }
+    .kp { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .feed li { grid-template-columns: 50px minmax(0, 1fr) 46px; }
+    .feed .a { display: none; }
+    .chat { position: static; width: auto; margin: 0 14px 14px; max-width: none; }
+    .ctl { margin-left: 0; }
+  }
+</style>
+</head>
+<body data-app>
+<main>
+<div class="ls">
+  <div class="ls-head">
+    <div>
+      <h1>Live store</h1>
+      <p>Shoppers browse and buy on the left. The autonomous back office reacts on the right. Press Start, or buy something yourself.</p>
+    </div>
+    <div class="ctl">
+      <button class="play" id="play" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg><span>Start</span></button>
+      <div class="seg" id="speed" role="group" aria-label="Speed"><button type="button" data-s="1" aria-pressed="true">1×</button><button type="button" data-s="2">2×</button><button type="button" data-s="4">4×</button></div>
+      <button class="inj" id="viral" type="button">Viral post: 3× demand</button>
+      <button class="inj" id="delay" type="button">Supplier delay</button>
+      <button class="inj kill" id="kill" type="button" aria-pressed="false">Kill switch</button>
+      <span class="clock">Day <span id="c-d">1</span> <b id="c-t">09:00</b></span>
+    </div>
+  </div>
+
+  <div class="split">
+    <section class="shop x" id="shop" aria-label="Simulated storefront">
+      <span class="shop-tag">Storefront · simulated shoppers</span>
+      <div class="shop-nav">
+        <span class="shop-logo">HALDEN</span>
+        <nav><span>Bath</span><span>Bed</span><span>Throws</span><span>Journal</span></nav>
+        <span class="sp"></span>
+        <label class="xray" for="xr"><input id="xr" type="checkbox" checked> Show what the agents see</label>
+        <span class="bag" id="bag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 8h14l-1.2 12H6.2z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg><span class="n" id="bag-n">0</span></span>
+      </div>
+      <div class="banner"><span><b>Autumn linen</b> · Free UK delivery over €120</span><span class="muted" id="banner-r">Prices and stock are set by agents</span></div>
+      <div class="grid-p" id="grid"></div>
+      <div class="shoppers" id="shoppers"></div>
+      <div class="chat idle" id="chat" aria-live="polite">
+        <div class="chat-h"><i></i>Halden Care <span>AI agent · grounded</span></div>
+        <div class="chat-b" id="chat-b"><div class="msg a">Hello! Ask me about orders, delivery or care.<span class="cite">replies cite real order data</span></div></div>
+      </div>
+    </section>
+
+    <section class="ops" aria-label="Back office">
+      <div class="box">
+        <h3>Company today <span id="state">paused</span></h3>
+        <div class="kp">
+          <div><b id="k-o">0</b><span>orders</span></div>
+          <div><b id="k-r">€0</b><span>revenue</span></div>
+          <div><b id="k-c">€412k</b><span>cash</span></div>
+          <div><b id="k-a" class="ok">100%</b><span>autonomous</span></div>
+          <div><b id="k-h">0</b><span>human touches</span></div>
+        </div>
+      </div>
+      <div class="box">
+        <h3>Order pipeline <span>Order Orchestrator · deterministic</span></h3>
+        <div class="pipe"><div><b id="p-paid">0</b><span>paid · fraud ✓</span></div><div><b id="p-rel">0</b><span>released to 3PL</span></div><div><b id="p-ship">0</b><span>shipped</span></div><div><b id="p-back">0</b><span>backorder</span></div></div>
+        <ul class="orders" id="orders"><li class="none">Orders appear here as shoppers check out.</li></ul>
+      </div>
+      <div class="box">
+        <h3>Inbound supply <span id="po-n">0 open POs</span></h3>
+        <div class="road" id="road">
+          <div class="end l"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21V9l6-4v4l6-4v4l6-4v16z"/></svg>Supplier</div>
+          <div class="track"></div>
+          <div class="end r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10l9-6 9 6v11H3z"/><path d="M8 21v-7h8v7"/></svg>3PL</div>
+        </div>
+        <p class="none" id="road-empty">No purchase orders in transit. Procurement creates them when stock reaches its reorder point.</p>
+      </div>
+      <div class="box">
+        <h3>Agent activity <span id="feed-n">0 actions</span></h3>
+        <ul class="feed" id="feed"><li class="none">Agents act here: every line is an audited action with its risk tier.</li></ul>
+      </div>
+    </section>
+  </div>
+  <p class="muted" style="font-size:12px;margin:0">Time is compressed (one tick = one hour). Products, prices and stock are illustrative; Halden Home is fictional and the Yves Delorme supplier relationship is hypothetical.</p>
+</div>
+</main>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const eur = (v) => "€" + Math.round(v).toLocaleString("en-GB");
+
+  // -------- catalogue (illustrative) --------
+  const P = [
+    { id: "towel", name: "Étoile bath towel · white", by: "Yves Delorme", sw: "sw-terry-white", list: 79, cost: 28, stock: 42, demand: 3, lead: 5, promo: 0.10, ads: true },
+    { id: "hand", name: "Étoile hand towel · stone", by: "Yves Delorme", sw: "sw-terry-stone", list: 39, cost: 14, stock: 34, demand: 4, lead: 5, promo: 0, ads: true },
+    { id: "duvet", name: "Nuit sateen duvet cover", by: "Yves Delorme", sw: "sw-sateen", list: 249, cost: 92, stock: 16, demand: 1.6, lead: 6, promo: 0, ads: true },
+    { id: "pillow", name: "Nuit percale pillowcase pair", by: "Yves Delorme", sw: "sw-percale", list: 69, cost: 25, stock: 30, demand: 3, lead: 6, promo: 0, ads: true },
+    { id: "throw", name: "Washed linen throw · flax", by: "Halden atelier", sw: "sw-flax", list: 129, cost: 46, stock: 95, demand: 0.8, lead: 8, promo: 0, ads: false },
+    { id: "robe", name: "Waffle bathrobe · ivory", by: "Halden atelier", sw: "sw-waffle", list: 149, cost: 55, stock: 22, demand: 1.4, lead: 7, promo: 0, ads: true },
+  ];
+  P.forEach((p) => { p.base = p.demand; p.waitlist = 0; p.floor = Math.ceil(p.cost / (1 - 0.38)); });
+  const price = (p) => Math.round(p.list * (1 - p.promo) * 100) / 100;
+  const cover = (p) => (p.demand ? Math.max(0, p.stock) / p.demand : 99);
+  const openPO = (p) => POS.find((o) => o.pid === p.id && !o.done);
+
+  // -------- state --------
+  let tick = 9, speed = 1, playing = false, kill = false, nextOrder = 48210, actions = 0, humans = 0, orders = 0, revenue = 0, cash = 412000, bag = 0;
+  const POS = [], ORD = [];
+
+  // -------- storefront --------
+  const grid = $("grid");
+  grid.innerHTML = P.map((p) =>
+    '<article class="pc" id="pc-' + p.id + '"><div class="img ' + p.sw + '"><span class="fold"></span><span class="badge" id="bd-' + p.id + '" hidden></span></div>' +
+    '<div><div class="name">' + p.name + '</div><div class="by">' + p.by + "</div></div>" +
+    '<div class="price" id="pr-' + p.id + '"></div>' +
+    '<button class="buy" type="button" id="buy-' + p.id + '">Add to bag</button>' +
+    '<div class="xr" id="xr-' + p.id + '"></div></article>').join("");
+  P.forEach((p) => $("buy-" + p.id).addEventListener("click", () => customer(p, true)));
+  $("xr").addEventListener("change", (e) => $("shop").classList.toggle("x", e.target.checked));
+
+  function paintProduct(p, flash) {
+    const pr = $("pr-" + p.id);
+    pr.innerHTML = p.promo ? eur2(price(p)) + "<s>" + eur2(p.list) + "</s>" : eur2(p.list);
+    if (flash) { pr.classList.remove("flash"); void pr.offsetWidth; pr.classList.add("flash"); }
+    const bd = $("bd-" + p.id), po = openPO(p);
+    let b = null;
+    if (p.stock <= 0) b = po ? ["out", "Pre-order · ships day " + (Math.floor(po.eta / 24) + 1)] : ["out", "Sold out · notify me"];
+    else if (p.justIn) b = ["new", "Back in stock"];
+    else if (p.stock <= 5) b = ["low", "Only " + p.stock + " left"];
+    else if (p.promo) b = ["sale", "−" + Math.round(p.promo * 100) + "%"];
+    bd.hidden = !b; if (b) { bd.className = "badge " + b[0]; bd.textContent = b[1]; }
+    const btn = $("buy-" + p.id);
+    btn.textContent = p.stock > 0 ? "Add to bag" : po ? "Pre-order" : "Notify me";
+    btn.classList.toggle("pre", p.stock <= 0);
+    const c = cover(p), col = c < 7 ? "var(--danger)" : c < 20 ? "var(--warn)" : c > 60 ? "var(--info)" : "var(--ok)";
+    $("xr-" + p.id).innerHTML =
+      "stock <b>" + Math.max(0, p.stock) + "</b>" + (p.back ? " (+" + p.back + " backordered)" : "") + " · demand " + p.demand.toFixed(1) + "/day · cover <b>" + c.toFixed(1) + "d</b>" +
+      '<div class="bar"><i style="width:' + Math.min(100, (c / 60) * 100) + "%;background:" + col + '"></i></div>' +
+      '<div class="chips"><span class="' + (p.ads ? "on" : "off") + '">ads ' + (p.ads ? "on" : "paused") + "</span>" +
+      "<span>floor " + eur2(p.floor) + "</span>" + (po ? "<span>PO " + po.qty + " inbound</span>" : "") + (p.waitlist ? "<span>waitlist " + p.waitlist + "</span>" : "") + "</div>";
+  }
+  const eur2 = (v) => "€" + (Math.round(v) === v ? v : v.toFixed(2));
+
+  // -------- shopper animation --------
+  const layer = $("shoppers"), shop = $("shop");
+  const COLORS = ["#3448c5", "#9a6a17", "#1f7a4a", "#6b3fb0", "#b4322b", "#1f6aa6"];
+  const NAMES = ["AM", "JL", "RK", "SB", "TC", "EW", "NP", "HG", "OM", "LD", "VF", "CZ"];
+  function rel(el) { const a = el.getBoundingClientRect(), s = shop.getBoundingClientRect(); return { x: a.left - s.left + a.width / 2, y: a.top - s.top + a.height / 2 }; }
+  const wait = (ms) => new Promise((r) => setTimeout(r, reduce ? 0 : ms / speed));
+  async function customer(p, you) {
+    const d = document.createElement("div");
+    d.className = "shopper" + (you ? " you" : "");
+    d.style.background = you ? "var(--fg)" : COLORS[Math.floor(Math.random() * COLORS.length)];
+    d.textContent = you ? "You" : NAMES[Math.floor(Math.random() * NAMES.length)];
+    if (you) d.style.fontSize = "9px";
+    const s = shop.getBoundingClientRect();
+    d.style.transform = "translate(" + (20 + Math.random() * (s.width - 60)) + "px," + (s.height + 10) + "px)";
+    layer.appendChild(d);
+    await wait(40);
+    const card = $("pc-" + p.id), c = rel(card.querySelector(".img"));
+    d.style.transform = "translate(" + (c.x - 14) + "px," + (c.y - 14) + "px)";
+    card.classList.add("hot");
+    await wait(950);
+    card.classList.remove("hot");
+    if (p.stock <= 0 && !openPO(p)) {
+      p.waitlist++; say(d, "notify me");
+      log("Lifecycle Agent", "Added shopper to waitlist for " + p.name, "EV", "--llm"); paintProduct(p);
+      await wait(900); d.style.opacity = "0"; setTimeout(() => d.remove(), 400); return;
+    }
+    say(d, p.stock <= 0 ? "pre-order" : "+ bag");
+    const b = rel($("bag"));
+    d.style.transform = "translate(" + (b.x - 14) + "px," + (b.y - 14) + "px)";
+    await wait(900);
+    bag++; $("bag-n").textContent = bag; $("bag").classList.add("bump"); setTimeout(() => $("bag").classList.remove("bump"), 220);
+    d.style.opacity = "0"; setTimeout(() => d.remove(), 400);
+    placeOrder(p, you);
+  }
+  function say(d, t) { const s = document.createElement("span"); s.className = "say"; s.textContent = t; d.appendChild(s); }
+
+  // -------- orders (deterministic path, never halted) --------
+  function placeOrder(p, you) {
+    const id = nextOrder++, amt = price(p);
+    const risky = !you && Math.random() < 0.04;
+    const o = { id, p, amt, st: risky ? "held" : p.stock > 0 ? "paid" : "backorder", t: tick, you };
+    if (!risky) { if (p.stock > 0) p.stock--; else p.back = (p.back || 0) + 1; orders++; revenue += amt; cash += amt; }
+    ORD.unshift(o); ORD.length = Math.min(ORD.length, 40);
+    if (risky) log("Fraud Screening", "Held order #" + id + " · Radar 81 + address mismatch", "T0", "--flax");
+    else if (o.st === "backorder") log("Order Orchestrator", "Backorder #" + id + " · ships with inbound PO", "T1", "--fg-muted");
+    else log("Order Orchestrator", (you ? "Your order" : "Order") + " #" + id + " · " + p.name.split(" ·")[0] + " " + eur2(amt) + " · fraud ✓", "T0", "--fg-muted");
+    p.justIn = false;
+    paintProduct(p); paintOrders(); paintKPIs();
+    if (you) chatPush([["c", "Did my order go through?"], ["a", "Yes. Order #" + id + " is paid and " + (o.st === "backorder" ? "reserved from the inbound shipment." : "being picked at our UK warehouse."), "cited: order #" + id]]);
+  }
+  function paintOrders() {
+    const counts = { paid: 0, released: 0, shipped: 0, backorder: 0 };
+    ORD.forEach((o) => { if (counts[o.st] !== undefined) counts[o.st]++; });
+    $("p-paid").textContent = counts.paid; $("p-rel").textContent = counts.released; $("p-ship").textContent = counts.shipped + ORD.filter((o) => o.st === "delivered").length; $("p-back").textContent = counts.backorder;
+    const ul = $("orders");
+    ul.innerHTML = ORD.slice(0, 5).map((o) => '<li><span class="id">#' + o.id + '</span><span class="it">' + (o.you ? "<b>You</b> · " : "") + o.p.name + " · " + eur2(o.amt) + '</span><span class="st ' + o.st + '">' + o.st + "</span></li>").join("") || '<li class="none">Orders appear here as shoppers check out.</li>';
+  }
+
+  // -------- activity feed --------
+  function log(agent, msg, tier, kc) {
+    if (tier !== "EV") actions++;
+    const ul = $("feed");
+    if (ul.firstElementChild && ul.firstElementChild.classList.contains("none")) ul.innerHTML = "";
+    const li = document.createElement("li");
+    li.className = "new";
+    li.innerHTML = '<span class="t">D' + (Math.floor(tick / 24) + 1) + " " + String(tick % 24).padStart(2, "0") + ':00</span><span class="a" style="--kc:var(' + (kc || "--accent") + ')"><i></i>' + agent + '</span><span class="m">' + msg + '</span><span class="tier ' + tier + '">' + (tier === "EV" ? "event" : tier === "HALT" ? "halted" : tier) + "</span>";
+    ul.prepend(li);
+    while (ul.children.length > 60) ul.lastChild.remove();
+    $("feed-n").textContent = actions + " actions";
+    paintKPIs();
+  }
+  function act(agent, msg, tier, kc) {
+    if (kill) { log(agent, "HALTED by kill switch: " + msg, "HALT", "--danger"); return false; }
+    log(agent, msg, tier, kc); return true;
+  }
+  function paintKPIs() {
+    $("k-o").textContent = orders; $("k-r").textContent = eur(revenue); $("k-c").textContent = "€" + Math.round(cash / 1000) + "k";
+    $("k-h").textContent = humans; $("k-a").textContent = actions ? ((100 * (actions - humans)) / actions).toFixed(1) + "%" : "100%";
+    $("state").textContent = playing ? (kill ? "kill switch on" : "running") : "paused";
+    $("po-n").textContent = POS.filter((o) => !o.done).length + " open POs";
+  }
+
+  // -------- support chat --------
+  let chatBusy = false;
+  async function chatPush(lines) {
+    if (chatBusy) return; chatBusy = true;
+    const b = $("chat-b"), ch = $("chat"); ch.classList.remove("idle");
+    for (const [who, text, cite] of lines) {
+      if (who === "a") { const t = document.createElement("div"); t.className = "typing"; t.textContent = "agent is checking the ledger…"; b.appendChild(t); b.scrollTop = b.scrollHeight; await wait(900); t.remove(); }
+      const m = document.createElement("div"); m.className = "msg " + who; m.innerHTML = text + (cite ? '<span class="cite">' + cite + "</span>" : "");
+      b.appendChild(m); while (b.children.length > 8) b.firstChild.remove(); b.scrollTop = b.scrollHeight;
+      await wait(700);
+    }
+    setTimeout(() => ch.classList.add("idle"), 2500); chatBusy = false;
+  }
+  function ticket() {
+    const shipped = ORD.find((o) => o.st === "shipped" || o.st === "released"), r = Math.random();
+    if (r < 0.45 && shipped) {
+      chatPush([["c", "Where is my order #" + shipped.id + "?"], ["a", "It left our warehouse and the carrier expects delivery tomorrow before 6pm.", "cited: order #" + shipped.id + " · tracking DPD"]]);
+      log("Customer Care", "Answered WISMO for #" + shipped.id + " (cited tracking)", "T1", "--llm");
+    } else if (r < 0.7 && ORD.length) {
+      const o = ORD[Math.floor(Math.random() * Math.min(ORD.length, 10))];
+      if (o.amt <= 150 && act("Refund Policy", "Refund " + eur2(o.amt) + " for #" + o.id + " (damaged, policy-clean)", "T0", "--fg-muted")) {
+        revenue -= o.amt; cash -= o.amt;
+        chatPush([["c", "My " + o.p.name.split(" ·")[0].toLowerCase() + " arrived with a pulled thread."], ["a", "Sorry about that. I've refunded " + eur2(o.amt) + " to your card; no need to send it back.", "refund policy engine · T0 · idempotent"]]);
+      }
+    } else {
+      const p = P[Math.floor(Math.random() * P.length)];
+      chatPush([["c", "How should I wash the " + p.name.split(" ·")[0].toLowerCase() + "?"], ["a", "Machine wash at 40°C, tumble dry low. Avoid fabric softener to keep the loops absorbent.", "cited: product care sheet v3"]]);
+      log("Customer Care", "Answered care question (cited product sheet)", "T1", "--llm");
+    }
+  }
+
+  // -------- inbound trucks --------
+  function paintRoad() {
+    const road = $("road");
+    road.querySelectorAll(".truck").forEach((t) => { if (!POS.find((o) => "tr-" + o.no === t.id && !o.done)) t.remove(); });
+    const live = POS.filter((o) => !o.done);
+    $("road-empty").hidden = live.length > 0;
+    live.forEach((o, i) => {
+      let t = $("tr-" + o.no);
+      if (!t) {
+        t = document.createElement("div"); t.className = "truck"; t.id = "tr-" + o.no;
+        t.innerHTML = '<span class="tb"></span><svg viewBox="0 0 26 20" fill="currentColor"><path d="M1 3h14v11H1zM15 7h5l4 4v3h-9z"/><circle cx="6" cy="16" r="2.5"/><circle cx="19" cy="16" r="2.5"/></svg>';
+        road.appendChild(t);
+      }
+      const k = o.acked ? Math.min(1, (tick - o.ship) / (o.eta - o.ship)) : 0;
+      t.style.left = "calc(96px + (100% - 192px) * " + k.toFixed(3) + ")";
+      t.style.top = 2 + (i % 3) * 34 + "px";
+      t.classList.toggle("late", !!o.late);
+      t.querySelector(".tb").textContent = o.pname + " ×" + o.qty + (o.acked ? "" : " · awaiting ack");
+    });
+  }
+
+  // -------- the autonomous brain (one tick = one hour) --------
+  let poNo = 931;
+  function agents() {
+    P.forEach((p) => {
+      const c = cover(p), po = openPO(p);
+      // Pricing: end promo when cover is critical; promote overstock within the floor
+      if (p.promo && c < 7) { if (act("Pricing Agent", "Ended " + Math.round(p.promo * 100) + "% promo on " + p.name.split(" ·")[0] + " (cover " + c.toFixed(1) + "d)", "T0", "--flax")) { p.promo = 0; paintProduct(p, true); } }
+      if (!p.promo && c > 60 && price(p) * 0.9 >= p.floor && !p.promoDone) { if (act("Pricing Agent", "Promo −10% on " + p.name.split(" ·")[0] + " (overstock " + c.toFixed(0) + "d, above floor " + eur2(p.floor) + ")", "T1", "--flax")) { p.promo = 0.1; p.promoDone = true; p.demand *= 1.6; paintProduct(p, true); } }
+      // Marketing: stock-aware ads with hysteresis
+      if (p.ads && c < 7) { if (act("Budget Allocator", "Paused ads on " + p.name.split(" ·")[0] + " (cover " + c.toFixed(1) + "d)", "T0", "--llm")) p.ads = false; }
+      else if (!p.ads && c > 20 && p.stock > 0) { if (act("Budget Allocator", "Resumed ads on " + p.name.split(" ·")[0], "T0", "--llm")) { p.ads = true; p.demand = Math.max(p.demand, p.base); } }
+      // Replenishment + procurement
+      const rop = p.demand * (p.lead + 3);
+      if (!po && p.stock <= rop) {
+        const qty = Math.ceil((p.demand * (p.lead + 14) - p.stock + (p.back || 0)) / 6) * 6, val = qty * p.cost;
+        const tier = val <= 5000 ? "T0" : val <= 20000 ? "T1" : "T2";
+        const anomalous = p.demand > p.base * 2;
+        const t = anomalous && tier !== "T2" ? "T2" : tier;
+        if (act("Procurement", "PO-" + poNo + " · " + p.name.split(" ·")[0] + " ×" + qty + " = " + eur(val) + (t === "T2" ? " (Buy Panel ✓)" : ""), t, "--llm")) {
+          POS.push({ no: poNo++, pid: p.id, pname: p.name.split(" ·")[0].replace("Étoile ", ""), qty, val, created: tick, acked: false, ship: 0, eta: tick + 2 + p.lead * 24, done: false });
+          log("Supplier Liaison", "Sent PO via " + (p.by === "Yves Delorme" ? "EDI 850" : "email + PDF"), "T0", "--llm");
+        }
+      }
+    });
+    // Supplier acknowledgements and arrivals
+    POS.filter((o) => !o.done).forEach((o) => {
+      const p = P.find((x) => x.id === o.pid);
+      if (!o.acked && tick - o.created >= 2) { o.acked = true; o.ship = tick; log("Supplier Liaison", "Ack received for PO-" + o.no + " · verified against PO (maker-checker)", "T1", "--llm"); }
+      if (o.acked && tick >= o.eta) {
+        o.done = true; p.stock += Math.max(0, o.qty - (p.back || 0)); p.back = 0; p.justIn = true;
+        const back = ORD.filter((x) => x.p === p && x.st === "backorder");
+        back.forEach((x) => (x.st = "released"));
+        log("Inbound Coordinator", "Received " + o.qty + " × " + o.pname + " at 3PL UK1" + (back.length ? " · " + back.length + " backorders released" : ""), "T0", "--ok");
+        if (p.waitlist) { log("Lifecycle Agent", "Back-in-stock email to " + p.waitlist + " waitlisted shoppers", "T0", "--llm"); p.demand += p.waitlist * 0.3; p.waitlist = 0; }
+        cash -= o.val; log("Accounts Payable", "3-way match OK · paid PO-" + o.no + " " + eur(o.val), "T0", "--ok");
+        if (p.demand > p.base * 1.5) p.demand = Math.max(p.base, p.demand * 0.6);
+        paintProduct(p, true);
+      }
+    });
+    // Order lifecycle progression
+    ORD.forEach((o) => { if (o.st === "paid" && tick - o.t >= 1) o.st = "released"; else if (o.st === "released" && tick - o.t >= 3) o.st = "shipped"; else if (o.st === "shipped" && tick - o.t >= 24) o.st = "delivered"; });
+    // Daily reconciliation
+    if (tick % 24 === 18) log("Reconciliation", "Stripe payout matched to " + orders + " charges · journals posted", "T0", "--ok");
+    if (tick % 24 === 23) log("Sentinel", "All agents within baseline · refund ratio " + (0.4 + Math.random()).toFixed(1) + "%", "EV", "--danger");
+  }
+
+  // -------- clock --------
+  let acc = 0, last = performance.now(), shopAcc = 0;
+  function loop(now) {
+    const dt = now - last; last = now;
+    if (playing) {
+      acc += dt * speed; shopAcc += dt * speed;
+      if (acc >= 1400) {
+        acc = 0; tick++;
+        $("c-d").textContent = Math.floor(tick / 24) + 1; $("c-t").textContent = String(tick % 24).padStart(2, "0") + ":00";
+        agents();
+        if (Math.random() < 0.18) ticket();
+        P.forEach((p) => paintProduct(p)); paintOrders(); paintRoad(); paintKPIs();
+      }
+      // shoppers: arrival rate from demand (compressed ×6 so the shop feels alive)
+      if (shopAcc >= 400) {
+        shopAcc = 0;
+        const hour = tick % 24, traffic = hour < 7 ? 0.2 : hour < 18 ? 1 : 0.7;
+        P.forEach((p) => { if (Math.random() < (p.demand / 24) * 4 * traffic * 0.4 * (p.ads ? 1 : 0.6)) customer(p, false); });
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // -------- controls --------
+  function setPlaying(on) {
+    playing = on;
+    $("play").querySelector("span").textContent = on ? "Pause" : "Resume";
+    $("play").querySelector("svg").innerHTML = on ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4v16l13-8z"/>';
+    paintKPIs();
+  }
+  $("play").addEventListener("click", () => setPlaying(!playing));
+  $("speed").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; speed = +b.dataset.s; $("speed").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); });
+  $("viral").addEventListener("click", () => {
+    const p = P[0]; p.demand = p.base * 3;
+    log("Demand Sensing", "Velocity 3× plan on Étoile bath towel · validated as real demand by Fraud Screening", "EV", "--flax");
+    $("banner-r").textContent = "An interiors post is driving traffic to the Étoile towel";
+    if (!playing) setPlaying(true);
+  });
+  $("delay").addEventListener("click", () => {
+    const o = POS.find((x) => !x.done && x.acked) || POS.find((x) => !x.done);
+    if (!o) { log("Supplier Liaison", "No PO in transit to delay yet. Try again once a truck is on the road.", "EV", "--llm"); return; }
+    o.eta += 72; o.late = true;
+    log("Supplier Liaison", "Supplier email: PO-" + o.no + " delayed 3 days · verified by Extractor + Verifier", "T1", "--llm");
+    act("Procurement", "AmendPO-" + o.no + " new ETA · re-plan cover", "T1", "--llm");
+    chatPush([["a", "Heads-up: your pre-order is running 3 days late. We'll email tracking the moment it ships.", "cited: PO-" + o.no + " v2 · proactive"]]);
+    paintRoad();
+  });
+  $("kill").addEventListener("click", () => {
+    kill = !kill; $("kill").setAttribute("aria-pressed", String(kill));
+    if (kill) humans++;
+    log("Owner", kill ? "Kill switch ON: agents may not change prices, ads, refunds or POs. Orders keep flowing." : "Kill switch released", kill ? "T3" : "EV", "--fg");
+  });
+  document.addEventListener("keydown", (e) => { if (e.code === "Space" && e.target === document.body) { e.preventDefault(); setPlaying(!playing); } });
+
+  P.forEach((p) => paintProduct(p)); paintOrders(); paintRoad(); paintKPIs();
+})();
+</script>
+</body>
+</html>

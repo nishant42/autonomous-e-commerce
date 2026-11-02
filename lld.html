@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Low-Level Design</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deep dive B · Low-level design</div>
+<h1>Schemas, contracts and algorithms</h1>
+<p class="lede">The HLD says <em>what</em> the components are. This page says <em>exactly how</em> the critical ones behave: the Ledger schema, the Action Proposal contract, the gateway algorithm, idempotency, tool definitions, the supplier adapter interface and a durable workflow.</p>
+
+<div class="toc"><a href="#erd">Ledger ERD</a><a href="#proposal">Action Proposal</a><a href="#gateway">Gateway algorithm</a><a href="#idem">Idempotency</a><a href="#policy">Policy</a><a href="#tool">Tool contract</a><a href="#adapter">Supplier adapter</a><a href="#workflow">Workflow</a><a href="#apis">Internal APIs</a></div>
+
+<h2 id="erd">Database schema (Ops Ledger)</h2>
+<h3>Operational core</h3>
+<div class="diagram">
+<script type="text/x-mermaid">
+erDiagram
+  SUPPLIER ||--o{ SUPPLIER_SKU : "sells"
+  SKU ||--o{ SUPPLIER_SKU : "bought as"
+  SKU ||--o{ STOCK_POSITION : "per warehouse"
+  SKU ||--o{ INVENTORY_MOVEMENT : "append-only"
+  SKU ||--o{ PRICE_CHANGE : "history"
+  SKU ||--o{ FORECAST : "per run"
+  FORECAST_RUN ||--o{ FORECAST : "produces"
+  SUPPLIER ||--o{ PURCHASE_ORDER : "receives"
+  PURCHASE_ORDER ||--|{ PO_LINE : "contains"
+  PO_LINE }o--|| SKU : "for"
+  PURCHASE_ORDER ||--o{ PO_EVENT : "append-only"
+  PURCHASE_ORDER ||--o{ ASN : "shipped as"
+  PURCHASE_ORDER ||--o{ SUPPLIER_INVOICE : "billed as"
+  SKU {
+    text sku_id PK
+    text collection
+    int case_pack
+    numeric unit_cost_eur
+    numeric list_price_eur
+    numeric margin_floor_eur
+    text abc_class
+  }
+  SUPPLIER {
+    text supplier_id PK
+    text name
+    text channel_profile "api, edi, email, portal"
+    jsonb terms "MOQ, payment, MAP"
+    numeric otif_28d
+  }
+  SUPPLIER_SKU {
+    text supplier_id FK
+    text sku_id FK
+    text supplier_ref
+    numeric price_eur
+    int lead_time_p50_d
+    int lead_time_p90_d
+  }
+  STOCK_POSITION {
+    text sku_id FK
+    text node "UK1, EU1"
+    int on_hand
+    int allocated
+    int in_transit
+    int on_order
+    int atp
+    bigint version "optimistic lock"
+  }
+  INVENTORY_MOVEMENT {
+    bigint id PK
+    text sku_id FK
+    text node
+    int qty_delta
+    text reason "sale, receipt, recon"
+    timestamptz at
+  }
+  PURCHASE_ORDER {
+    uuid po_id PK
+    text supplier_id FK
+    text status
+    numeric total_eur
+    text channel_used
+    text idempotency_key UK
+    bigint version
+  }
+  PO_LINE {
+    uuid po_id FK
+    text sku_id FK
+    int qty
+    numeric unit_price_eur
+  }
+  PO_EVENT {
+    bigint id PK
+    uuid po_id FK
+    text type "sent, acked, amended"
+    jsonb payload
+  }
+  PRICE_CHANGE {
+    bigint id PK
+    text sku_id FK
+    numeric old_price
+    numeric new_price
+    uuid proposal_id FK
+  }
+  FORECAST_RUN {
+    uuid run_id PK
+    text model_version
+    numeric backtest_wape
+    bool published
+  }
+  FORECAST {
+    uuid run_id FK
+    text sku_id FK
+    date day
+    numeric p10
+    numeric p50
+    numeric p90
+  }
+  ASN {
+    uuid asn_id PK
+    uuid po_id FK
+    date eta
+  }
+  SUPPLIER_INVOICE {
+    uuid invoice_id PK
+    uuid po_id FK
+    numeric amount_eur
+    text match_status "3-way"
+  }
+</script>
+</div>
+<p class="caption">Stock, purchase orders, prices and forecasts. Tables marked append-only are never edited, only added to.</p>
+<h3>Agent control and audit</h3>
+<div class="diagram">
+<script type="text/x-mermaid">
+erDiagram
+  AGENT ||--o{ AGENT_VERSION : "releases"
+  AGENT_VERSION ||--o{ TOOL_GRANT : "may call"
+  AGENT_VERSION ||--o{ ACTION_PROPOSAL : "proposes"
+  ACTION_PROPOSAL ||--|| ACTION_DECISION : "decided by gateway"
+  ACTION_DECISION ||--o| ACTION_EXECUTION : "executed as"
+  ACTION_DECISION ||--o| VERDICT : "T2 needs"
+  ACTION_EXECUTION ||--o{ OUTBOX : "announces"
+  AGENT ||--o{ QUARANTINE : "can be"
+  ACTION_PROPOSAL }o--o| CASE_FILE : "belongs to"
+  CASE_FILE ||--o{ CASE_ENTRY : "notes from agents"
+  AGENT {
+    text agent_id PK
+    text domain
+    text identity "managed identity"
+    text status "active, shadow, quarantined"
+  }
+  AGENT_VERSION {
+    text agent_id FK
+    text version
+    text prompt_hash
+    text model_policy
+    int max_tool_rounds
+    int token_budget
+  }
+  TOOL_GRANT {
+    text agent_id FK
+    text tool_name
+    text scope
+  }
+  ACTION_PROPOSAL {
+    uuid proposal_id PK
+    text idempotency_key UK
+    text action_type
+    jsonb params
+    text agent_id FK
+    text agent_version
+    jsonb evidence "resultIds, doc ids"
+    jsonb snapshot "what the agent saw"
+    text as_of
+  }
+  ACTION_DECISION {
+    uuid proposal_id FK
+    text tier "T0 to T3"
+    text outcome "approved, denied, halted"
+    jsonb policy_trace
+    text approver "gateway, panel, owner"
+  }
+  VERDICT {
+    uuid proposal_id FK
+    text verifier_agent
+    text result
+    text reason
+  }
+  ACTION_EXECUTION {
+    uuid proposal_id FK
+    text status
+    jsonb vendor_ref
+    int attempts
+    text prev_hash "hash chain"
+  }
+  OUTBOX {
+    bigint id PK
+    text aggregate_id
+    jsonb cloudevent
+    timestamptz published_at
+  }
+  QUARANTINE {
+    text agent_id FK
+    text reason
+    timestamptz since
+  }
+  CASE_FILE {
+    uuid case_id PK
+    text title
+    text correlation_id
+  }
+  CASE_ENTRY {
+    uuid case_id FK
+    text agent_id
+    text finding
+  }
+</script>
+</div>
+<p class="caption">Which agents exist, what they may call, and the full chain from proposal to decision to execution.</p>
+<h3>Agent memory</h3>
+<div class="diagram">
+<script type="text/x-mermaid">
+erDiagram
+  THREAD ||--o{ MESSAGE : "contains"
+  THREAD ||--o{ MEMORY_FACT : "keeps"
+  THREAD ||--o{ TOOL_CALL_LOG : "records"
+  THREAD ||--|| THREAD_SUMMARY : "rolling"
+  THREAD {
+    uuid thread_id PK
+    text agent_id
+    text subject "supplier, customer, case"
+    text anchor_id "PO or order it is about"
+  }
+  MESSAGE {
+    uuid thread_id FK
+    text role "user, assistant, tool"
+    text content
+    bool is_refusal "never summarised"
+  }
+  THREAD_SUMMARY {
+    uuid thread_id FK
+    text summary
+    int covers_until_msg
+  }
+  MEMORY_FACT {
+    uuid thread_id FK
+    text fact
+    text source_ref "verified only"
+  }
+  TOOL_CALL_LOG {
+    text result_id PK
+    uuid thread_id FK
+    text tool
+    jsonb args
+    text preview
+    jsonb audit "identity, scope"
+  }
+</script>
+</div>
+<p class="caption">Conversation memory for supplier and customer threads. Refusals are flagged and never summarised.</p>
+
+<h2 id="proposal">Action Proposal contract</h2>
+<pre><code>// The ONLY way an agent causes a side effect
+type ActionProposal = {
+  idempotencyKey: string;           // see derivation below
+  actionType: "CreatePurchaseOrder" | "AmendPO" | "ChangePrice" | "IssueRefund" | "SetAdBudget" | ...;
+  params: Record&lt;string, unknown&gt;;  // validated against the actionType's JSON Schema
+  target: { aggregate: "purchase_order" | "sku_price" | ...; id: string; expectedVersion?: number };
+  agent: { id: string; version: string; identity: string };   // identity from token, not from payload
+  rationale: string;                // human-readable; must cite evidence ids
+  evidence: Array&lt;{ kind: "tool_result" | "doc" | "policy"; ref: string }&gt;;
+  asOf: { ledgerLsn: string; eventOffset: number };
+  correlationId: string; caseId?: string;
+};</code></pre>
+
+<h2 id="gateway">Action Gateway algorithm</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart TB
+  A["Receive proposal"] --> B{"Caller identity valid<br/>and == agent.identity?"}
+  B -- no --> X1["Reject 401 + security event"]
+  B -- yes --> C{"Kill switch / quarantine<br/>for agent · domain · scope?"}
+  C -- halted --> X2["Reject HALTED<br/>(workflow uses fallback)"]
+  C -- ok --> D{"Idempotency key seen?"}
+  D -- "yes, done" --> X3["Return stored result"]
+  D -- "yes, in-flight" --> X4["Return 409 IN_PROGRESS"]
+  D -- new --> E["Validate params (JSON Schema)<br/>+ referential checks"]
+  E -- invalid --> X5["Reject with structured errors"]
+  E -- valid --> F{"expectedVersion == current?"}
+  F -- stale --> X6["Reject STALE → re-plan"]
+  F -- ok --> G["Evaluate policy (OPA):<br/>limits · counters · tier"]
+  G -- deny --> X7["Reject with policy trace"]
+  G -- "T0/T1" --> H["Reserve counters (Redis)<br/>record decision + outbox (txn)"]
+  G -- "T2" --> V["Await verifier / panel verdict"] --> H
+  G -- "T3" --> HU["Create exception, signal workflow"]
+  H --> I["Execute via adapter<br/>(vendor idempotency key)"]
+  I -- success --> J["Record execution + outbox event"]
+  I -- "retryable fail" --> K["Temporal retry w/ backoff"]
+  I -- "permanent fail" --> L["Release counters, compensate,<br/>record failure, raise event"]
+</script>
+</div>
+
+<h2 id="idem">Idempotency key derivation</h2>
+<pre><code>idempotency_key = sha256(
+  action_type
+  + business_key        // e.g. "sup_yd:ETOILE-BATH-BLANC:2026-W40" for a reorder cycle
+  + intent_version      // bumped only when the agent deliberately makes a *new* decision
+)
+// Same decision retried (crash, timeout, duplicate event) → same key → one effect.
+// A deliberate second PO in the same cycle must bump intent_version, which policy counts and limits.
+
+CREATE UNIQUE INDEX ux_action_idem ON action_proposal (idempotency_key);
+-- Execution also passes a vendor idempotency key (e.g. Stripe Idempotency-Key header),
+-- so even a gateway bug cannot double-charge.</code></pre>
+
+<h2 id="policy">Policy as code (example)</h2>
+<pre><code>package gateway.procurement
+
+default tier := "DENY"
+
+po_value := input.params.total_eur
+env := data.envelope.procurement
+
+tier := "T0" if { po_value &lt;= env.po_tiers_eur.T0; not anomaly_influenced }
+tier := "T1" if { po_value &lt;= env.po_tiers_eur.T1; po_value &gt; env.po_tiers_eur.T0; not anomaly_influenced }
+tier := "T2" if { po_value &lt;= env.po_tiers_eur.T2; anomaly_influenced }
+tier := "T2" if { po_value &lt;= env.po_tiers_eur.T2; po_value &gt; env.po_tiers_eur.T1 }
+tier := "T3" if { po_value &gt; env.po_tiers_eur.T2 }
+
+anomaly_influenced if input.evidence_flags.forecast_anomaly_influenced
+
+deny contains "daily cap exceeded" if {
+  data.counters.procurement_today_eur + po_value &gt; env.daily_cap_eur
+}
+deny contains "cover cap exceeded" if {
+  input.derived.weeks_cover_after &gt; env.max_weeks_cover_after_po
+}</code></pre>
+
+<h2 id="tool">Tool contract (read tool, MCP-style)</h2>
+<pre><code>{
+  "name": "get_supplier_terms",
+  "description": "Returns contractual terms for a supplier: price list version, MOQ, case packs, incoterms, payment terms, expedite policy. Use before building any PO. Do not guess terms.",
+  "input_schema": {
+    "type": "object",
+    "required": ["supplier_id"],
+    "properties": {
+      "supplier_id": { "type": "string", "pattern": "^sup_[a-z0-9]{2,16}$" },
+      "sku_ids": { "type": "array", "items": { "type": "string" }, "maxItems": 50 }
+    },
+    "additionalProperties": false
+  },
+  "x-scope": "procurement:read",
+  "x-memory": "exportable",
+  "x-max-result-rows-for-model": 50
+}</code></pre>
+
+<h2 id="adapter">Supplier adapter interface</h2>
+<pre><code>interface SupplierChannel {
+  readonly kind: "api" | "edi" | "portal" | "email" | "sftp";
+  capabilities(): { sendPO: boolean; ack: "sync" | "async" | "none"; asn: boolean; invoice: boolean; stockFeed: boolean };
+  sendPurchaseOrder(po: CanonicalPO, key: string): Promise&lt;TransmitReceipt&gt;;   // idempotent on key
+  pollInbound(since: Cursor): AsyncIterable&lt;RawInbound&gt;;                     // acks, ASNs, invoices, emails
+  normalise(raw: RawInbound): Promise&lt;CanonicalSupplierEvent | NeedsExtraction&gt;;
+}
+// NeedsExtraction → Document Extractor (maker) → Verifier (checker) → CanonicalSupplierEvent
+// Canonical events: supplier.ack · supplier.delay · supplier.price_change · asn.received · invoice.received</code></pre>
+
+<h2 id="workflow">Durable workflow (Temporal, abridged)</h2>
+<pre><code>export async function reorderWorkflow(input: { supplierId: string; skuId: string; cycle: string }) {
+  const rec = await activities.planReorder(input);                    // deterministic planner
+  if (!rec.needed) return;
+
+  const proposal = await activities.runAgent("procurement-agent", { rec }, { startToCloseTimeout: "5m", retry: { maximumAttempts: 3 } });
+  const decision = await activities.submitToGateway(proposal);        // tiering happens here
+
+  if (decision.tier === "T3") {
+    const ok = await condition(() =&gt; ownerSignal !== undefined, "8h"); // human signal or timeout
+    if (!ok) return activities.applySafeDefault(proposal);            // e.g. P50 quantity
+  }
+
+  const ack = await Promise.race([
+    waitForSignal("supplierAck"),
+    sleep("48h").then(() =&gt; activities.chaseSupplier(proposal.poId)), // escalating chase ladder
+  ]);
+  await activities.trackToReceipt(proposal.poId);                     // ASN → 3PL receipt
+}</code></pre>
+
+<h2 id="apis">Internal APIs (selection)</h2>
+<div class="table-wrap"><table>
+<tr><th>Endpoint</th><th>Caller</th><th>Notes</th></tr>
+<tr><td><code>POST /v1/proposals</code></td><td>Harness (agent identity)</td><td>Returns <code>{decisionId, tier, status}</code>; 409 on in-flight idempotency; 412 on stale version</td></tr>
+<tr><td><code>GET /v1/proposals/{id}</code></td><td>Workflow, console</td><td>Full policy trace and evidence</td></tr>
+<tr><td><code>POST /v1/verdicts/{proposalId}</code></td><td>Verifier / panel identity only</td><td>Signed verdict; the maker's identity is rejected</td></tr>
+<tr><td><code>PUT /v1/switches/{scope}</code></td><td>Sentinel, Incident Commander, owners</td><td>Audited; takes effect in ≤ 1s</td></tr>
+<tr><td><code>GET /v1/snapshots/{task}</code></td><td>Harness</td><td>Typed context snapshot with <code>as_of</code></td></tr>
+</table></div>
+
+</div></main>
+</body>
+</html>

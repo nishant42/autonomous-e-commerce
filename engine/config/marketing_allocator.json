@@ -1,0 +1,48 @@
+{
+  "agent": "marketing_allocator",
+  "version": 4,
+  "model": {
+    "plan": "claude-sonnet-5-5",
+    "max_steps": 60,
+    "token_budget_month": 900000,
+    "max_tokens_per_decision": 16000
+  },
+  "reads": [
+    "ad_metrics_panel",
+    "orders_panel",
+    "margin_table",
+    "stock_cover",
+    "creative_history",
+    "holdout_readout",
+    "experiment_budget",
+    "signal_health",
+    "band_options"
+  ],
+  "writes": [
+    "propose_budget_change",
+    "propose_pause",
+    "propose_negatives",
+    "raise_anomaly"
+  ],
+  "policy": {
+    "payback_factor": 1.2,
+    "min_conversions": 25,
+    "min_days": 4,
+    "learning_conversions": 15,
+    "max_change_pct": 20,
+    "cooldown_hours_per_cell": 48,
+    "fatigue_frequency": 2.5,
+    "fatigue_ctr_drop": 0.25,
+    "min_cover_days_for_acquisition": 14,
+    "signal_drift_freeze_pct": 25,
+    "weekly": {
+      "min_share_per_arm": 0.05,
+      "max_share_per_arm": 0.55,
+      "max_weekly_change_per_arm": 0.4,
+      "exploration_floor": 0.1,
+      "holdout_geo_share": 0.1
+    },
+    "spend_exhaustion_multiple": 12,
+    "pause_above_target_multiple": 1.5
+  }
+}

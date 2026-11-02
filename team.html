@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents at a Glance</title>
+<meta name="description" content="Every department and every agent in one line: what it does and which technique it uses.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+<style>
+  .depts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 0 24px; }
+  .dept { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; min-width: 0; }
+  .dept.tower { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+  .dept h3 { margin: 0 0 2px; font-size: 17px; display: flex; align-items: baseline; gap: 10px; }
+  .dept h3 .n { font-family: var(--mono); font-size: 12px; color: var(--fg-faint); font-weight: 500; }
+  .dept .sub { margin: 0 0 10px; font-size: 13px; color: var(--fg-faint); }
+  .dept ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .dept li { margin: 0; font-size: 14px; line-height: 1.45; }
+  .dept li b { font-weight: 650; }
+  .dept li.key > b::before { content: "★ "; color: var(--flax); }
+  .dept li .inside { display: block; margin-top: 3px; padding-left: 12px; border-left: 2px solid var(--border); color: var(--fg-muted); font-size: 13px; }
+  .dept li .tag { margin-left: 4px; vertical-align: 1px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; color: var(--fg-muted); margin: 0 0 22px; }
+  .story { list-style: none; counter-reset: s; margin: 0 0 22px; padding: 0; display: grid; gap: 8px; }
+  .story li { counter-increment: s; display: grid; grid-template-columns: 30px 150px minmax(0, 1fr); gap: 12px; align-items: start; margin: 0; padding: 12px 14px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14.5px; line-height: 1.5; }
+  .story li::before { content: counter(s); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 13px; }
+  .story .d { font-size: 12.5px; font-weight: 600; color: var(--flax); padding-top: 4px; }
+  .story .d.tower { color: var(--danger); }
+  .chain { font-family: var(--mono); font-size: 12.5px; color: var(--fg-muted); }
+  @media (max-width: 860px) { .depts { grid-template-columns: minmax(0, 1fr); } .story li { grid-template-columns: 30px minmax(0, 1fr); } .story .d { grid-column: 2; padding-top: 0; } .story li > div { grid-column: 2; } }
+</style>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Agents at a glance</div>
+<h1>Ten departments, one line per agent</h1>
+<p class="lede">Nine business departments plus a Control Tower. Each department has a thin supervisor that only routes work, and specialist agents with one job each. Money and maths are handled by plain code and ML; language models are used for reading, writing and judgement.</p>
+
+<div class="legend">
+  <span><b style="color:var(--flax)">★</b> key agent</span>
+  <span class="tag llm">LLM</span>
+  <span class="tag ml">ML</span>
+  <span class="tag rules">Rules</span>
+  <span class="tag wf">Workflow</span>
+  <span class="tag det">Code</span>
+</div>
+
+<div class="depts">
+
+<section class="dept">
+  <h3><span class="n">01</span>Commerce</h3>
+  <p class="sub">Customer orders</p>
+  <ul>
+    <li class="key"><b>Order Orchestrator</b>: takes each customer order through payment, fraud check, warehouse and shipping. <span class="tag wf">Workflow</span> <span class="tag det">Code</span></li>
+    <li class="key"><b>Fraud Screening</b>: checks whether an order is fake; the LLM only reviews the unclear cases. <span class="tag ml">ML</span> <span class="tag llm">LLM</span></li>
+    <li><b>Catalogue Agent</b>: turns supplier product files into clean product pages; a checker approves them. <span class="tag llm">LLM</span></li>
+  </ul>
+</section>
+
+<section class="dept">
+  <h3><span class="n">02</span>Demand &amp; Inventory</h3>
+  <p class="sub">What will sell, and what we have</p>
+  <ul>
+    <li class="key"><b>Forecasting Agent</b>: predicts how many of each product will sell in the coming weeks, as a range. <span class="tag ml">ML</span></li>
+    <li class="key"><b>Demand Sensing</b>: spots sudden changes, such as a towel selling 3× faster. <span class="tag ml">ML</span></li>
+    <li><b>Inventory Position</b>: counts stock on the shelf, reserved and on the way. <span class="tag det">Code</span></li>
+    <li class="key"><b>Replenishment Planner</b>: calculates how many to buy and when, e.g. "buy 240". <span class="tag ml">Optimiser</span></li>
+    <li><b>Planner Explainer</b>: writes in plain English why the planner chose that number. <span class="tag llm">LLM</span></li>
+  </ul>
+</section>
+
+<section class="dept">
+  <h3><span class="n">03</span>Procurement</h3>
+  <p class="sub">Buying stock</p>
+  <ul>
+    <li class="key"><b>Procurement Agent</b>: turns the planner's number into a purchase order, checks cash and supplier terms, and sends it to the Action Gateway. <span class="tag llm">LLM</span> <span class="tag det">Calculators</span>
+      <span class="inside">Inside: <b>PO Builder</b> builds the order · <b>Budget Checker</b> confirms we can afford it · <b>Buy Panel</b>: three agents vote on large or unusual orders.</span></li>
+  </ul>
+</section>
+
+<section class="dept">
+  <h3><span class="n">04</span>Supplier Management</h3>
+  <p class="sub">Talking to Yves Delorme and others</p>
+  <ul>
+    <li class="key"><b>Supplier Liaison</b>: talks to suppliers by API, EDI, file, email or portal; sends POs and reads replies. <span class="tag llm">LLM</span> <span class="tag det">RPA</span>
+      <span class="inside">Inside: <b>Document Extractor</b> reads emails and PDFs · <b>Verifier</b> double-checks what was read.</span></li>
+    <li><b>Supplier Scorecard</b>: rates each supplier on on-time delivery and correct quantities. <span class="tag det">Code</span> <span class="tag ml">Stats</span></li>
+  </ul>
+</section>
+
+<section class="dept">
+  <h3><span class="n">05</span>Logistics</h3>
+  <p class="sub">Coordinating the outsourced 3PL</p>
+  <ul>
+    <li><b>Inbound Coordinator</b>: tracks supplier deliveries coming into the warehouse. <span class="tag wf">Workflow</span></li>
+    <li><b>Node Allocation</b>: decides which warehouse (UK or EU) ships each order. <span class="tag ml">Optimiser</span></li>
+    <li><b>Delivery Exception</b>: handles lost, late or damaged parcels; reships up to €250. <span class="tag llm">LLM</span> <span class="tag rules">Rules</span></li>
+  </ul>
+</section>
+
+<section class="dept">
+  <h3><span class="n">06</span>Pricing</h3>
+  <p class="sub">Prices and promotions</p>
+  <ul>
+    <li class="key"><b>Pricing Agent</b>: sets prices, never below the profit floor. <span class="tag ml">ML</span> <span class="tag rules">Rules</span>
+      <span class="inside">Inside: <b>Price Guard</b> blocks any bad price, e.g. €9 for a €79 towel.</span></li>
+    <li><b>Promotion Planner</b>: plans discounts and sales. <span class="tag ml">ML</span></li>
+    <li><b>Competitor Monitor</b>: watches competitor prices. <span class="tag det">Code</span></li>
+  </ul>
+</section>
+
+<section class="dept">
+  <h3><span class="n">07</span>Marketing</h3>
+  <p class="sub">Demand creation, stock-aware</p>
+  <ul>
+    <li class="key"><b>Growth Strategist</b>: plans campaigns and announces them in advance so the forecast can account for them. <span class="tag llm">LLM</span></li>
+    <li><b>Budget Allocator</b>: moves ad money towards products that sell well and have stock. <span class="tag ml">Bandit</span></li>
+    <li><b>Creative Agent</b>: writes ad copy and emails; <b>Brand Guardian</b> checks tone and claims. <span class="tag llm">LLM</span></li>
+    <li><b>Lifecycle / CRM Agent</b>: sends "back in stock" and abandoned-basket emails. <span class="tag llm">LLM</span> <span class="tag rules">Rules</span></li>
+  </ul>
+</section>
+
+<section class="dept">
+  <h3><span class="n">08</span>Customer Care</h3>
+  <p class="sub">Questions, complaints and refunds</p>
+  <ul>
+    <li><b>Triage</b>: reads each customer message and sorts it (where is my order, refund, complaint). <span class="tag llm">Small LLM</span></li>
+    <li class="key"><b>Resolution Agent</b>: answers using real order data. <span class="tag llm">LLM</span> <span class="tag rules">Rules</span>
+      <span class="inside">Inside: <b>Refund Policy</b> rules decide the refund; the LLM only writes the reply · <b>Reply QA</b> checks it before sending.</span></li>
+    <li><b>Voice of Customer</b>: finds common complaints, e.g. "many say the towel shrinks". <span class="tag llm">LLM</span></li>
+  </ul>
+</section>
+
+<section class="dept">
+  <h3><span class="n">09</span>Finance</h3>
+  <p class="sub">Mostly plain code: no model guesses with money</p>
+  <ul>
+    <li class="key"><b>Reconciliation</b>: checks every hour that our numbers match Stripe and the warehouse. <span class="tag det">Code</span></li>
+    <li class="key"><b>Accounts Payable</b>: pays a supplier only if order, delivery and invoice all match. <span class="tag det">Code</span></li>
+    <li><b>Cash &amp; Budget</b>: tracks cash and sets how much each department may spend. <span class="tag det">Code</span></li>
+    <li><b>Close &amp; Reporting</b>: produces the monthly accounts. <span class="tag det">Code</span></li>
+  </ul>
+</section>
+
+<section class="dept tower">
+  <h3><span class="n">10</span>Control Tower</h3>
+  <p class="sub">Safety only: no business work</p>
+  <ul>
+    <li class="key"><b>Sentinel</b>: watches all agents and automatically quarantines one that behaves strangely. <span class="tag ml">ML</span></li>
+    <li><b>Incident Commander</b>: handles emergencies and coordinates the fix. <span class="tag llm">LLM</span></li>
+    <li><b>Auditor</b>: re-checks a sample of yesterday's decisions; too many mistakes reduces that agent's autonomy. <span class="tag llm">LLM</span> <span class="tag rules">Rules</span></li>
+  </ul>
+</section>
+
+</div>
+
+<h2 id="story">The story: a viral post makes a towel sell 3× faster</h2>
+<p class="lede">An interiors influencer posts about the Yves Delorme Étoile towel. Sales jump from 3 to 9 a day. This is how every department reacts, with no human involved.</p>
+
+<ol class="story">
+  <li><span class="d">Commerce</span><div><b>Orders flow in.</b> Customers buy on Shopify and pay with Stripe; the <b>Order Orchestrator</b> sends each order to the warehouse. Plain software, no AI needed.</div></li>
+  <li><span class="d">Demand &amp; Inventory</span><div><b>Spot it.</b> <b>Demand Sensing</b> notices the towel selling 3× faster than forecast and posts an alert on the event bus.</div></li>
+  <li><span class="d">Commerce</span><div><b>Is it real?</b> <b>Fraud Screening</b> confirms 311 distinct real customers, not bots or a fraud ring.</div></li>
+  <li><span class="d">Demand &amp; Inventory</span><div><b>Re-forecast.</b> The <b>Forecasting Agent</b> predicts about 9 a day, fading back over 3 weeks. <b>Inventory Position</b>: only 42 left, under 3 days of cover.</div></li>
+  <li><span class="d">Marketing · Pricing</span><div><b>Don't make it worse.</b> The <b>Budget Allocator</b> pauses ads on the towel and moves budget to well-stocked products. The <b>Pricing Agent</b> ends the 10% discount, but does not raise the price, to protect the premium brand.</div></li>
+  <li><span class="d">Procurement</span><div><b>Buy more.</b> The <b>Replenishment Planner</b> simulates thousands of futures to size the order. The <b>Procurement Agent</b> writes the PO and checks cash. Because demand is unusual, the <b>Action Gateway</b> raises the risk tier and the <b>Buy Panel</b> must agree: 180 now, review in 10 days.</div></li>
+  <li><span class="d">Supplier Mgmt</span><div><b>Talk to the supplier.</b> The <b>Supplier Liaison</b> sends the PO to Yves Delorme by EDI and emails an expedite request. Reply: "120 in 5 days, 60 in 3 weeks, €380 fee." One agent extracts it, a second verifies it, and the PO is amended.</div></li>
+  <li><span class="d">Customer Care</span><div><b>Look after customers.</b> When stock runs out the site shows an honest pre-order date, affected customers are emailed proactively, and new visitors can join a "notify me" list.</div></li>
+  <li><span class="d">Logistics</span><div><b>Stock arrives.</b> On day 7, 120 towels arrive. The <b>Inbound Coordinator</b> confirms receipt, backorders ship first, and the <b>Lifecycle agent</b> emails the waitlist. Ads resume gradually.</div></li>
+  <li><span class="d">Finance</span><div><b>Pay the supplier.</b> <b>Accounts Payable</b> pays only when order, delivery and invoice match. <b>Reconciliation</b> checks our numbers against Stripe and the warehouse.</div></li>
+  <li><span class="d tower">Control Tower</span><div><b>Safety throughout.</b> The <b>Sentinel</b> watches every agent and would quarantine one instantly if it misbehaved, or halt purchasing if the spike turned out to be fraud.</div></li>
+</ol>
+
+<div class="callout info">
+  <span class="t">Human touches: zero</span>
+  <p>An owner would only be paged for a PO above €60k, a split panel verdict, a supplier changing bank details, or confirmed fraud. No agent moved money directly: every action passed through the Action Gateway's limits first.</p>
+  <p class="chain">Viral post → Demand Sensing → Fraud check → Re-forecast → Ads paused, discount ended → PO approved by panel → Sent to Yves Delorme → Customers informed → Stock arrives → Supplier paid · Control Tower watching throughout</p>
+</div>
+
+<div class="callout">
+  <span class="t">How they work together</span>
+  <p>Agents never act directly and never chat in free text. They announce facts as events, long jobs such as a purchase order run in a workflow engine, and every real action (money, stock, prices, messages to suppliers) goes through one Action Gateway that checks limits and risk tier. Full detail per agent: <a href="agents.html">Agent hierarchy</a>.</p>
+</div>
+
+</div></main>
+</body>
+</html>

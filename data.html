@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared State & Data</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">04 · Shared-state / data architecture</div>
+<h1>One truth per fact, events for everyone else</h1>
+<p class="lede">Agents are stateless. That is a feature, as long as the company's state is kept outside them, reliably. This page covers who is the source of truth for each fact, how writes become events, how agents read a consistent picture, and how agent memory is kept from poisoning itself.</p>
+
+<h2>Source-of-truth map</h2>
+<div class="table-wrap"><table>
+<tr><th>Fact</th><th>System of record</th><th>Mirrored to</th><th>Why there</th></tr>
+<tr><td>Catalogue, orders, customers</td><td>Shopify</td><td>Ops Ledger (projection), lakehouse</td><td>Checkout and storefront live there; we avoid a second order system.</td></tr>
+<tr><td>Payments, refunds, payouts, disputes</td><td>Stripe</td><td>Ops Ledger, accounting</td><td>Money movement is owned by the payment processor.</td></tr>
+<tr><td><strong>Physical</strong> stock (on-hand by bin)</td><td>3PL WMS</td><td>Ops Ledger movements</td><td>The 3PL physically counts the goods; we cannot know better than them.</td></tr>
+<tr><td><strong>Commercial</strong> stock: ATP, allocated, in-transit, on-order</td><td><strong>Ops Ledger</strong></td><td>Shopify inventory levels (push)</td><td>Needs POs, ASNs and allocations, which no single vendor has.</td></tr>
+<tr><td>POs, supplier commitments, ASNs</td><td><strong>Ops Ledger</strong></td><td>Accounting (commitments), supplier channel</td><td>Procurement is our core IP.</td></tr>
+<tr><td>Price book, promotions</td><td><strong>Ops Ledger</strong></td><td>Shopify (push)</td><td>Needs guardrails, history and legal reference prices.</td></tr>
+<tr><td>Forecasts, parameters, scorecards</td><td><strong>Ops Ledger</strong> (latest) + lakehouse (history)</td><td>n/a</td><td>Versioned so any decision can be reproduced.</td></tr>
+<tr><td>General ledger, VAT, AP/AR</td><td>Accounting system</td><td>Lakehouse</td><td>Statutory books belong in a compliant, auditable product.</td></tr>
+<tr><td>Action Proposals, decisions, executions, audit</td><td><strong>Ops Ledger</strong> (append-only) + immutable archive</td><td>Lakehouse, SIEM</td><td>The chain of evidence for every autonomous act.</td></tr>
+<tr><td>Agent memory (threads, summaries, facts)</td><td><strong>Ops Ledger</strong> (memory schema, pgvector)</td><td>n/a</td><td>Same transactional guarantees and access control as business data.</td></tr>
+</table></div>
+
+<h2>Write path: transactional outbox</h2>
+<p>A state change and the event announcing it are committed in the <strong>same database transaction</strong>. A relay then publishes the outbox rows to Service Bus. This removes the classic dual-write bug, where the DB committed but the event was lost, or the reverse.</p>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  AGW["Action Gateway<br/>or domain service"] -->|"BEGIN"| TX
+  subgraph TX["One DB transaction"]
+    direction TB
+    A["UPDATE purchase_order<br/>SET status='sent', version=version+1<br/>WHERE id=$1 AND version=$2"]
+    B["INSERT INTO po_event (append-only)"]
+    C["INSERT INTO outbox (CloudEvent po.sent)"]
+  end
+  TX -->|"COMMIT"| R["Outbox relay<br/>(ordered per aggregate)"]
+  R --> SB["Service Bus topic<br/>session = aggregate id"]
+  SB --> P1["Projections<br/>stock cover · scorecards"]
+  SB --> P2["Other domains' agents"]
+  SB --> P3["Lakehouse sink"]
+  SB --> P4["Control Tower tap"]
+</script>
+</div>
+<p class="caption">Figure 4.1: Outbox pattern. Optimistic concurrency (the version column) stops two writers from overwriting each other, and sessions keep per-aggregate ordering.</p>
+
+<h2>Consistency model</h2>
+<div class="grid g3">
+  <div class="card"><h4>Strong inside an aggregate</h4><p>A PO, a SKU's price or a refund is changed only by its owning service, in one transaction, with optimistic locking. Money and stock are never eventually consistent with themselves.</p></div>
+  <div class="card"><h4>Eventual across domains</h4><p>Marketing learns about low stock within seconds, not in the same transaction. Every consumer is idempotent (it deduplicates by event ID) and tolerates reordering by checking aggregate version.</p></div>
+  <div class="card"><h4>Reconciled against the outside</h4><p>Hourly, the 3PL stock snapshot and Stripe balance are compared with the Ledger. Drift beyond tolerance raises <code>recon.break</code>. Corrections are posted as compensating movements; history is never edited.</p></div>
+</div>
+
+<h2>How an agent reads "the state of the company"</h2>
+<p>Agents do not query raw tables. They receive a <strong>typed context snapshot</strong> built by a resolver for their task, and they can pull more through read tools. Each snapshot carries an <code>as_of</code> watermark (the event offset), so a decision can later be replayed with exactly what the agent knew.</p>
+<pre><code>// Typed snapshot handed to the Procurement Agent for one task
+{
+  "task": "reorder_review",
+  "as_of": { "ledger_lsn": "0/1A3F9C8", "event_offset": 882113 },
+  "sku": { "id": "YD-TWL-ETOILE-BATH-BLANC", "supplier_id": "sup_yd", "case_pack": 6, "moq_eur": 1500 },
+  "position": { "on_hand": 42, "allocated": 18, "in_transit": 0, "on_order": 60, "atp": 24 },
+  "forecast": { "model": "fcst-v17", "daily_p50": 9.1, "daily_p90": 13.4, "velocity_vs_plan": 3.1 },
+  "lead_time_days": { "p50": 24, "p90": 33, "source": "scorecard-2026-09-29" },
+  "budget": { "open_to_buy_eur": 38200, "cash_runway_weeks": 19 },
+  "policies": ["proc-001 service-level 97%", "proc-004 max cover 16 weeks"],
+  "open_actions": [ { "id": "ap_7f2", "type": "CreatePurchaseOrder", "status": "pending_T2" } ]
+}</code></pre>
+<div class="callout"><span class="t">Why a typed snapshot and not "let the agent query SQL"?</span>
+<p>Free-form queries make agents slow, expensive and non-reproducible, and they widen the attack surface. A typed snapshot is the contract between the platform and the agent. If a required field is missing, the harness fails the task loudly. It does not let the model guess.</p></div>
+
+<h2>Event contracts</h2>
+<p>All events use a CloudEvents envelope, with JSON Schemas in a registry. Schema changes are backward compatible: add optional fields only. A breaking change means a new event type version (<code>po.created.v2</code>) with both versions published during migration.</p>
+<pre><code>{
+  "specversion": "1.0",
+  "id": "evt_01J9ZK4Q8T6W",            // dedupe key for consumers
+  "type": "inventory.stock_low.v1",
+  "source": "/demand-planning/inventory-position",
+  "subject": "sku/YD-TWL-ETOILE-BATH-BLANC/node/UK1",
+  "time": "2026-09-30T09:14:03Z",
+  "correlationid": "corr_ab12",       // follows the business flow end to end
+  "causationid": "evt_01J9ZK3...",    // which event caused this one
+  "aggregateversion": 412,
+  "data": { "atp": 24, "days_of_cover_p50": 2.6, "reorder_point": 180 }
+}</code></pre>
+
+<h2>Agent memory: four kinds, each with its own rules</h2>
+<div class="table-wrap"><table>
+<tr><th>Memory</th><th>Contents</th><th>Storage</th><th>Lifetime and hygiene</th></tr>
+<tr><td><strong>Working</strong></td><td>The current task's context, tool results and scratchpad</td><td>Harness process + tool-result cache keyed by <code>resultId</code></td><td>Discarded at task end. Large tool results are truncated for the model; the full result is kept by handle so later steps (e.g. "export that") replay real data, not the model's paraphrase.</td></tr>
+<tr><td><strong>Episodic</strong></td><td>Supplier and customer threads, prior decisions on an entity</td><td>Postgres: rolling summary + durable facts + verbatim tail of recent turns</td><td>Older turns are compressed into summary and facts. <strong>Refusals, failed attempts and unverified claims are never written into the summary</strong>, so one bad turn cannot teach the agent to repeat it.</td></tr>
+<tr><td><strong>Semantic</strong></td><td>Policies, contracts, supplier terms, brand book, SOPs</td><td>AI Search / pgvector with document IDs</td><td>Versioned and access-scoped per agent. Answers cite the document ID and version.</td></tr>
+<tr><td><strong>Procedural</strong></td><td>Prompts, tool definitions, playbooks</td><td>Agent registry (git-backed, versioned)</td><td>Changes only through the evaluation-gated release process, never self-modified at runtime.</td></tr>
+</table></div>
+
+<div class="callout warn"><span class="t">Memory poisoning is a real production failure mode</span>
+<p>If an agent refuses once and a naive summariser writes "assistant refused" into its memory, the agent can keep refusing on every later turn. So refusals and failures are never written into long-term memory, and infrastructure errors use a message that cannot be mistaken for a model refusal. This applies to every supplier and customer thread.</p></div>
+
+</div></main>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Orchestration</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">05 · Agent orchestration</div>
+<h1>Choreography between domains, orchestration within them</h1>
+<p class="lede">Domains react to each other's <strong>events</strong> (choreography), which keeps them decoupled. Inside a domain, any process that must finish, such as a PO, a refund or a month-end close, runs as a <strong>durable workflow</strong> (orchestration). Agents are invoked as workflow <em>activities</em>, so retries, timeouts and history come for free.</p>
+
+<div class="tldr"><span class="t">Rules of the road</span>
+<ul>
+  <li>Agents do <strong>not</strong> chat with each other in free text. They communicate through typed events, typed commands and a shared case record.</li>
+  <li>Every long-running process has exactly one workflow instance per business key (e.g. <code>reorder:{supplier}:{sku}</code>), which prevents duplicate work by construction.</li>
+  <li>LLM "decides what next" only <em>inside</em> one agent's bounded tool loop. The business process sequence is code.</li>
+</ul></div>
+
+<h2>Three layers of control</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart TB
+  subgraph L1["1 · Events"]
+    direction LR
+    E1["order.placed"] --> E2["forecast.updated"] --> E3["stock.low"] --> E4["po.created"] --> E5["goods.received"]
+  end
+  subgraph L2["2 · Temporal workflow"]
+    direction LR
+    W1["Plan qty"] --> W2["Draft PO<br/>(agent)"] --> W3{"Tier?"}
+    W3 -- "T0/T1" --> W5["Execute via<br/>Action Gateway"]
+    W3 -- "T2" --> W4["Verifier /<br/>Buy Panel"] --> W5
+    W3 -- "T3" --> W6["Owner signal<br/>(timeout → safe default)"] --> W5
+    W5 --> W7["Await ack<br/>(48h timer)"] --> W8["Track ASN<br/>→ receipt"]
+  end
+  subgraph L3["3 · Agent loop"]
+    direction LR
+    A1["Model"] -- "tool call" --> A2["Validated tool"]
+    A2 -- "result" --> A1
+    A1 -- "final" --> A3["Typed output /<br/>Action Proposal"]
+  end
+  L1 -- "stock.low starts workflow" --> L2
+  L2 -- "Draft PO runs an agent" --> L3
+</script>
+</div>
+<p class="caption">Figure 5.1: Events start workflows, workflows call agents, and agents run a bounded loop. Each layer has its own failure handling.</p>
+
+<h2>Orchestration patterns in use</h2>
+<div class="grid g2">
+  <div class="card">
+    <h4>1 · Router → specialist sub-agents</h4>
+    <p>A supervisor classifies the input and routes it to a specialist using a closed routing table. Example: an inbound supplier email is classified as acknowledgement, delay, price change, invoice or other, then sent to the matching handler. The router returns strict JSON. If a specialist fails, the router returns a <strong>defined error payload</strong>, never free text.</p>
+  </div>
+  <div class="card">
+    <h4>2 · Maker → Checker</h4>
+    <p>One agent produces and an independent verifier checks: different prompt, often a different model, and read-only tools. Used for supplier document extraction, customer replies, creative and price changes. A pattern from production document pipelines: <em>extractor → mapper → verifier</em>.</p>
+  </div>
+  <div class="card">
+    <h4>3 · Panel + synthesis (T2 decisions)</h4>
+    <p>For high-stakes, judgement-heavy actions such as a large PO, a deep markdown or a new supplier, 3-4 personas assess a <strong>frozen decision pack</strong> in parallel: Demand Planner, CFO, Risk Officer, Brand. A synthesiser records the consensus level. A split verdict escalates the decision.</p>
+  </div>
+  <div class="card">
+    <h4>4 · Saga with compensation</h4>
+    <p>Multi-system changes, such as cancelling an order after 3PL release, run as sagas. Each step has a compensating action: recall from 3PL, then void the label, then refund. Temporal guarantees the compensations run even after crashes.</p>
+  </div>
+  <div class="card">
+    <h4>5 · Human signal with safe default</h4>
+    <p>A T3 step pauses the workflow and pages an owner. If there is no answer by the deadline, the workflow takes the pre-declared <strong>safe default</strong>, e.g. place the P50 quantity instead of the P90, or keep the current price. This means autonomy never depends on a human being awake.</p>
+  </div>
+  <div class="card">
+    <h4>6 · Blackboard case record</h4>
+    <p>Cross-domain situations, such as a demand spike, get a <strong>case</strong> row that every participating agent appends findings to: planner, procurement, pricing, marketing. It is typed, append-only and linked by <code>correlationid</code>, which gives shared context without agent-to-agent chat.</p>
+  </div>
+</div>
+
+<h2>Maker-checker in detail</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant SL as Supplier Liaison
+  participant DX as Doc Extractor (maker)
+  participant VF as Verifier (checker)
+  participant AG as Action Gateway
+  SL->>DX: order_confirmation.pdf (untrusted content)
+  DX-->>SL: {po_ref, lines[{sku, qty, unit_price, ship_date}], confidence per field}
+  SL->>VF: extraction + original doc + PO from Ledger
+  VF->>VF: deterministic checks (PO exists, SKUs on PO, arithmetic)
+  VF->>VF: LLM check: does each field appear in the source?
+  alt all fields verified and deltas within tolerance
+    VF-->>SL: pass
+    SL->>AG: RecordSupplierAck (T0)
+  else qty or price differs from PO
+    VF-->>SL: pass-with-deltas
+    SL->>AG: AmendPO proposal (T1/T2 by delta size)
+  else cannot verify
+    VF-->>SL: fail(reason)
+    SL->>SL: re-request clean document from supplier (email)
+  end
+</script>
+</div>
+
+<h2>Where each technique is used, and why</h2>
+<div class="table-wrap"><table>
+<tr><th>Technique</th><th>Use it for</th><th>Examples here</th><th>Never use it for</th></tr>
+<tr><td><span class="tag det">Deterministic code</span></td><td>Anything with one correct answer</td><td>ATP, landed cost, case-pack rounding, three-way match, tax, idempotency, allocation</td><td>Interpreting language</td></tr>
+<tr><td><span class="tag rules">Rules / policy</span></td><td>Limits and non-negotiables that must be explainable and auditable</td><td>Margin floor, MAP, refund policy, spend caps, EU reference-price rule, consent</td><td>Fuzzy judgement</td></tr>
+<tr><td><span class="tag ml">ML</span></td><td>Prediction from history</td><td>Demand forecast, elasticity, fraud and abuse scores, anomaly detection, lead-time distribution, budget bandits</td><td>Hard limits (too opaque), text generation</td></tr>
+<tr><td><span class="tag wf">Workflow engine</span></td><td>Must-complete, multi-step, long-lived processes</td><td>Order lifecycle, reorder, PO tracking, refund saga, close</td><td>Real-time reasoning</td></tr>
+<tr><td><span class="tag llm">LLM</span></td><td>Language, unstructured documents, ambiguous situations, trade-off reasoning across tool outputs, explanations</td><td>Supplier emails, PDF confirmations, customer replies, creative, product copy, choosing between PO options, incident briefs</td><td>Computing numbers, holding state, enforcing limits, final say on money</td></tr>
+</table></div>
+
+<h2>Preventing runaway agent interactions</h2>
+<div class="table-wrap"><table>
+<tr><th>Risk</th><th>Control</th></tr>
+<tr><td>Event storms / infinite loops (A triggers B triggers A)</td><td>A <code>causation</code> chain depth limit (e.g. 12) enforced by the bus consumer library. Per-agent invocation rate limits.</td></tr>
+<tr><td>Oscillation, e.g. pricing and marketing fighting (raise price → cut ads → lower price → raise ads)</td><td>Hysteresis bands, minimum dwell time per SKU (price changes at most 2 per week), and the Sentinel's flapping detector, which freezes the SKU and opens a case.</td></tr>
+<tr><td>Duplicate work on the same business key</td><td>Temporal workflow ID uniqueness (<code>reorder:sup_yd:SKU</code>) and idempotency keys at the gateway.</td></tr>
+<tr><td>Cost blow-ups in the tool loop</td><td>Maximum rounds (8), wall-clock timeout (180s), token budget per task and per agent per day, all enforced by the harness and AI gateway.</td></tr>
+<tr><td>Stale decisions (acting on old state)</td><td>Proposals carry the snapshot's <code>as_of</code>. The gateway rejects them if the aggregate version has moved (optimistic concurrency) and the workflow re-plans.</td></tr>
+</table></div>
+
+</div></main>
+</body>
+</html>

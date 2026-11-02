@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reorder Agent & the Towel Case</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deeper · D2 · Replenishment and reorder</div>
+<h1>Twenty white, twenty black, and the reorder that destroys the year</h1>
+<p class="lede">The case put to me was this. We sold twenty white towels and twenty black towels. At reorder time we bought twice as much white and no black. Why would anyone do that, and what intelligence stops it? The answer is not a better forecasting model. It is that <strong>units sold is not demand</strong>, and almost every inventory decision in small retail is made on the wrong number.</p>
+
+<div class="tldr"><span class="t">The short version</span>
+<ul>
+<li><strong>A stockout makes a product look dead.</strong> Black sold out on day 22 and recorded zero sales for 68 days. On a sales report that reads as "nobody wants black".</li>
+<li><strong>Being always available makes a weak product look steady.</strong> White was in stock all 90 days and discounted, so it dribbled out twenty units and looked like the reliable seller.</li>
+<li><strong>The same twenty units mean four times the demand.</strong> Corrected for availability, black ran at 0.91 units/day against white's 0.22. Black's true 90-day demand was about 80 units, not 20.</li>
+<li><strong>Part of white's sales were black's.</strong> Customers who wanted black and found it gone bought white. The naive reading does not just understate black, it <em>overstates</em> white.</li>
+<li><strong>The fix is a data decision, not a model.</strong> Nobody stores historical stock availability, so the evidence is destroyed daily. An hourly inventory snapshot is the first thing built, before any agent.</li>
+</ul>
+</div>
+
+<div class="callout info"><span class="t">This is implemented, not just described</span>
+<p>The engine in <code>engine/</code> runs these rules on 90 days of seeded history with no dependencies. <code>cd engine &amp;&amp; python3 run.py ui</code> opens an operator console at <code>127.0.0.1:8787</code> where a cycle can be run and watched job by job, proposals approved or rejected, and every number clicked back to the query that produced it. <code>python3 run.py demo</code> prints the same decisions in a terminal, and <a href="engine-run.html">this static snapshot</a> is what <code>run.py console</code> generates — the same decisions, read back out of the database, with every intermediate number, the gateway's verdict on each proposal and the full audit trail.</p></div>
+<div class="toc"><a href="#forensics">Forensics of the towel decision</a><a href="#why">Why humans and most tools get it wrong</a><a href="#calc">Calculator: what the agent would order</a><a href="#method">The method, step by step</a><a href="#data">The data that must exist</a><a href="#qty">From demand to quantity</a><a href="#config">Groceries and sunglasses: the same agent</a><a href="#harness">Harness, tools and policy</a><a href="#tools">Third-party selections</a><a href="#fail">Failure modes</a></div>
+
+<h2 id="forensics">Forensics of the towel decision</h2>
+<p>Here is the same quarter, read the way a sales report reads it, and read the way the agent reads it.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Fact for the quarter (90 days)</th><th>White towel</th><th>Black towel</th><th>What the report showed</th></tr>
+<tr><td>Units shipped</td><td>20</td><td>20</td><td><strong>Identical. This is the only line most people see.</strong></td></tr>
+<tr><td>Days available to buy</td><td>90</td><td>22</td><td>Not in the report at all — Shopify does not keep the history</td></tr>
+<tr><td>Rate of sale per available day</td><td>0.22</td><td><strong>0.91</strong></td><td>Hidden. Black is 4.1× faster.</td></tr>
+<tr><td>Sales in the last 60 days</td><td>12</td><td><strong>0</strong></td><td>"Black is dead stock." This single line drove the decision.</td></tr>
+<tr><td>Sold at a discount</td><td>13 of 20 at −30%</td><td>0 of 20</td><td>Revenue looked similar; margin did not</td></tr>
+<tr><td>Returns</td><td>18% (greying after wash)</td><td>5%</td><td>Returns sit in a different report, usually never joined to sales</td></tr>
+<tr><td>Contribution margin realised</td><td>≈ €98</td><td>≈ €209</td><td>Black earned twice as much from the same twenty units</td></tr>
+<tr><td>Signals of unmet demand</td><td>—</td><td>41 back-in-stock sign-ups, 390 product views while out of stock, 64 on-site searches for "black towel"</td><td>In Klaviyo and the search log, joined to nothing</td></tr>
+<tr><td>Estimated true demand</td><td>≈ 14 (after removing substitution)</td><td><strong>≈ 80</strong></td><td>The number the reorder should have used</td></tr>
+</table></div>
+
+<div class="callout danger"><span class="t">The cost of the wrong reorder</span>
+<p>The human decision bought 40 white at €7 cost (€280 of working capital in a product with 18% returns that only moves on discount, roughly 15 months of cover) and zero black. On the agent's reading, the next quarter loses around <strong>€880 of contribution margin</strong> in unserved black demand, plus the markdown needed to clear the white. Across a portfolio of ten products and a few hundred variants, this one class of error is the difference between a business that compounds and one that is permanently out of cash with a full warehouse.</p></div>
+
+<h2 id="why">Why this happens, including with inventory software</h2>
+<div class="table-wrap"><table>
+<tr><th>Cause</th><th>Mechanism</th><th>What the agent does differently</th></tr>
+<tr><td>Censored observation</td><td>You can only observe sales up to what you had. Zero stock produces zero sales, which is indistinguishable from zero demand in the data</td><td>Fits demand only on days the variant was actually buyable, using availability as an exposure offset</td></tr>
+<tr><td>Recency bias in the report</td><td>"Last 60 days" windows punish the item that stocked out early and reward the item that lingered</td><td>Windows are measured in available days, never calendar days</td></tr>
+<tr><td>Substitution counted as success</td><td>Demand displaced from the out-of-stock variant inflates the in-stock one, so the system doubles down on the weaker product</td><td>Estimates a substitution share for periods when a sibling variant was out of stock and removes it from the baseline</td></tr>
+<tr><td>Discounted volume treated as demand</td><td>Units moved at −30% are counted the same as full-price units</td><td>Baseline is price-adjusted; promotional days are flagged features, and the forecast is for the price we intend to charge</td></tr>
+<tr><td>Returns never joined</td><td>Gross units drive the buy; the returns rate lives in a support dashboard</td><td>Forecasts net units and uses margin after returns as the ordering objective</td></tr>
+<tr><td>Off-the-shelf tools inherit the same blind spot</td><td>Most Shopify replenishment apps forecast from the sales series and, at best, let a human tick "ignore stockout period". They cannot reconstruct what they never recorded</td><td>We record availability hourly from day one, which is what makes the reconstruction possible at all. This is the honest reason to build the decision layer rather than buy it.</td></tr>
+</table></div>
+
+<h2 id="calc">Calculator: what the agent would have ordered</h2>
+<div class="card" id="calc">
+<p class="muted">The engine in miniature. Defaults are the towel case; change anything to see how the decision moves. Lead time 45 days, review period 7 days, service level 97%, case pack 12, cost €7.</p>
+<div class="grid g2">
+<div>
+<h3>White</h3>
+<div class="grid g2">
+<label>Units shipped<input id="w_u" type="number" value="20"></label>
+<label>Days available<input id="w_d" type="number" value="90"></label>
+<label>Return rate %<input id="w_r" type="number" value="18"></label>
+<label>On hand now<input id="w_h" type="number" value="24"></label>
+</div>
+</div>
+<div>
+<h3>Black</h3>
+<div class="grid g2">
+<label>Units shipped<input id="b_u" type="number" value="20"></label>
+<label>Days available<input id="b_d" type="number" value="22"></label>
+<label>Return rate %<input id="b_r" type="number" value="5"></label>
+<label>On hand now<input id="b_h" type="number" value="0"></label>
+</div>
+</div>
+</div>
+<div class="table-wrap" style="margin-top:18px"><table id="calc-out">
+<tr><th>Line</th><th>White</th><th>Black</th></tr>
+</table></div>
+<p class="caption" id="calc-note"></p>
+</div>
+<script>
+(function(){
+  var P=90, LT=45, RP=7, Z=1.88, PACK=12, COST=7;
+  var rows=[["Rate of sale per available day",1],["Reconstructed 90-day demand",0],["Net of returns",0],
+            ["Demand over protection interval (52 d)",0],["Safety stock (97% service)",0],["Order-up-to level",0],
+            ["On hand + on order",0],["Agent order quantity (case pack 12)",0],["Capital committed",2]];
+  function g(id){return +document.getElementById(id).value||0;}
+  function calc(u,d,r,h,subPenalty){
+    var ros=d>0?u/d:0;
+    var dem=ros*P*(1-subPenalty);
+    var net=dem*(1-r/100);
+    var pi=LT+RP, mu=net/P*pi;
+    var ss=Z*Math.sqrt(Math.max(mu,0));
+    var out=mu+ss;
+    var order=Math.max(0, out-h);
+    order=Math.ceil(order/PACK)*PACK;
+    return {ros:ros, dem:dem, net:net, mu:mu, ss:ss, out:out, oh:h, order:order, cap:order*COST};
+  }
+  function fmt(v,kind){ if(kind===1) return v.toFixed(2); if(kind===2) return "€"+Math.round(v); return Math.round(v); }
+  function run(){
+    var bOOS = Math.max(0, P - g("b_d"));
+    var sub = Math.min(0.35, (bOOS/P)*0.4);          // share of white's sales displaced from black
+    var W=calc(g("w_u"),g("w_d"),g("w_r"),g("w_h"),sub);
+    var B=calc(g("b_u"),g("b_d"),g("b_r"),g("b_h"),0);
+    var vals=[[W.ros,B.ros],[W.dem,B.dem],[W.net,B.net],[W.mu,B.mu],[W.ss,B.ss],[W.out,B.out],[W.oh,B.oh],[W.order,B.order],[W.cap,B.cap]];
+    var t=document.getElementById("calc-out");
+    t.innerHTML="<tr><th>Line</th><th>White</th><th>Black</th></tr>"+rows.map(function(r,i){
+      var strong=(r[0].indexOf("Agent order")===0);
+      var open=strong?"<strong>":"", close=strong?"</strong>":"";
+      return "<tr><td>"+open+r[0]+close+"</td><td>"+open+fmt(vals[i][0],r[1])+close+"</td><td>"+open+fmt(vals[i][1],r[1])+close+"</td></tr>";
+    }).join("");
+    document.getElementById("calc-note").textContent =
+      "Substitution correction applied to white: "+Math.round(sub*100)+"% of its sales are treated as displaced demand from the out-of-stock sibling. "+
+      "The human decision was 40 white and 0 black. The agent proposes "+W.order+" white and "+B.order+" black, from the same twenty-and-twenty sales report.";
+  }
+  ["w_u","w_d","w_r","w_h","b_u","b_d","b_r","b_h"].forEach(function(id){document.getElementById(id).addEventListener("input",run);});
+  run();
+})();
+</script>
+<p>The arithmetic above is the simplified form, kept transparent on purpose. Production uses a negative-binomial fit with an availability offset, a lead-time distribution rather than a point estimate, and quantile forecasts; the structure of the decision is exactly what the calculator shows.</p>
+
+<h2 id="method">The method, step by step</h2>
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart TB
+  A["SKU-day panel<br/>units · price · discount · availability% · views · traffic · promo flag"] --> B["Clean<br/>winsorise spikes · flag viral and promo days · flag price changes"]
+  B --> C["Reconstruct demand<br/>negative binomial, offset = log(available hours)<br/>fit only on buyable days"]
+  C --> D["Remove substitution<br/>sibling-out-of-stock periods → displaced share removed from the in-stock variant"]
+  D --> E["Add unmet-demand evidence<br/>back-in-stock sign-ups · OOS product views · site searches → lower bound on censored demand"]
+  E --> F["Price-adjust to intended price<br/>elasticity from own promo history or category prior"]
+  F --> G["Hierarchical reconciliation<br/>thin variants borrow the colour and size curve from the style, style from the category"]
+  G --> H["Quantile forecast<br/>P10 / P50 / P90 over the protection interval"]
+  H --> I["Quantity engine<br/>newsvendor service level → order-up-to → MOQ, case pack, container rounding"]
+  I --> J["Constrain<br/>open-to-buy · cash runway · cover cap · shelf life"]
+  J --> K["propose_reorder<br/>tiered, maker-checker, evidence attached"]
+</script>
+</div>
+<p class="caption">Figure D2.1: Steps C, D and E are the ones that would have saved the towels, and all three depend on data that must be captured before it is needed.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Step</th><th>Technique</th><th>Why not something simpler</th></tr>
+<tr><td>Reconstruct demand</td><td>Negative-binomial GLM with <code>log(available_hours)</code> as offset; Poisson where dispersion is low. Fitted per style with variant effects, so thin variants are not fitted alone</td><td>Rate-of-sale per available day already recovers most of the value and is the fallback. The GLM adds proper handling of partial-day availability, overdispersion and seasonality, and gives intervals rather than a point</td></tr>
+<tr><td>Substitution</td><td>Estimate the displaced share from sibling-out-of-stock windows: compare the in-stock variant's rate during sibling-OOS periods against its own rate when all siblings were available</td><td>Ignoring it systematically rewards whichever variant happened to be available. That is precisely the towel failure</td></tr>
+<tr><td>Unmet-demand evidence</td><td>Back-in-stock sign-ups, product views while unbuyable, failed add-to-cart, site-search terms. Used as a lower bound and a cross-check, never as the primary estimate</td><td>These signals are biased but directionally strong, and they are free. Where they contradict the model by more than 50%, the agent raises the variant for human review rather than guessing</td></tr>
+<tr><td>Price adjustment</td><td>Log-log elasticity from the SKU's own promotional history; category prior when there is none</td><td>Forecasting at a blended historic price then buying for full-price selling is how overstock is created</td></tr>
+<tr><td>Hierarchy</td><td>Bottom-up forecast with MinT-style reconciliation to style and category totals</td><td>A new colour in an established style has no history of its own but inherits a reliable share curve</td></tr>
+<tr><td>Validation</td><td>Rolling-origin backtest, 8 folds; metrics are weighted MAPE, bias, and a <em>service-and-stock</em> simulation (would this policy have stocked out, and with how much capital tied up)</td><td>Forecast accuracy alone is a vanity metric. The agent is scored on the decisions the forecast caused</td></tr>
+</table></div>
+
+<h2 id="data">The data that must exist, and the job that creates it</h2>
+<div class="callout warn"><span class="t">The one irreversible mistake</span>
+<p>Availability history cannot be reconstructed later. If the hourly snapshot is not running from day one, the towel analysis is impossible a quarter from now — the evidence is simply gone. This is why the snapshot job is the first thing in the build order, ahead of every agent.</p></div>
+
+<div class="table-wrap"><table>
+<tr><th>Table</th><th>Source</th><th>Grain</th><th>Notes</th></tr>
+<tr><td><code>inventory_snapshot</code></td><td>Shopify Admin GraphQL <code>inventoryLevels</code>, hourly cron</td><td>variant × location × hour</td><td>Also records <code>continue_selling_when_out_of_stock</code>, because a variant can be buyable at zero stock and unbuyable above it</td></tr>
+<tr><td><code>sales_fact</code></td><td>Order and refund webhooks, idempotent</td><td>order line</td><td>Carries discount, channel, new-customer flag, and the refund joined back to the original line</td></tr>
+<tr><td><code>price_history</code></td><td>Product webhooks + the plan table</td><td>variant × hour</td><td>Planned promotions are written before they run, per rule R8</td></tr>
+<tr><td><code>demand_signal</code></td><td>Klaviyo back-in-stock, Shopify storefront events, site-search log</td><td>variant × day</td><td>The censored-demand lower bound</td></tr>
+<tr><td><code>supplier_terms</code></td><td>Supplier records, maintained by the liaison agent</td><td>supplier × sku</td><td>MOQ, case pack, price breaks, incoterms, and the <em>observed</em> lead-time distribution rather than the promised one</td></tr>
+<tr><td><code>receipt_fact</code></td><td>3PL inbound API</td><td>PO line × receipt</td><td>Ordered-to-received lag and short-ship rate update the lead-time distribution and the supplier scorecard</td></tr>
+</table></div>
+
+<h2 id="qty">From demand to quantity: the service level is an economic choice</h2>
+<p>A blanket "95% service level" is a guess dressed as a policy. The agent derives it per SKU from the newsvendor critical ratio, so the service level on a high-margin, long-shelf-life item is genuinely different from a thin-margin perishable.</p>
+
+<pre>critical_ratio = Cu / (Cu + Co)
+
+  Cu (cost of understocking) = contribution margin lost per unit of unmet demand
+                               + an estimated share of lost customer lifetime value
+  Co (cost of overstocking)  = holding cost over the expected sell-through time
+                               + expected markdown to clear
+                               + obsolescence (for perishables: full write-off after shelf_life_days)
+
+service_level = critical_ratio            -> the quantile of the demand distribution to cover
+order_up_to   = quantile(demand over lead_time + review_period, service_level)
+order_qty     = max(0, order_up_to - on_hand - on_order - in_transit)
+              -> rounded up to case pack, checked against MOQ and price breaks
+              -> capped by cover_cap_weeks, open_to_buy and the cash runway floor</pre>
+
+<div class="table-wrap"><table>
+<tr><th>Worked example</th><th>Black towel</th><th>Fresh yoghurt</th></tr>
+<tr><td>Contribution margin per unit</td><td>€11</td><td>€0.40</td></tr>
+<tr><td>Cost of overstocking a unit</td><td>€1.20 (holding + eventual markdown)</td><td>€0.90 (full write-off at expiry)</td></tr>
+<tr><td>Critical ratio → service level</td><td>11 / 12.2 = <strong>0.90</strong></td><td>0.40 / 1.30 = <strong>0.31</strong></td></tr>
+<tr><td>Behaviour implied</td><td>Hold cover, accept some leftover; stocking out is far more expensive than holding</td><td>Deliberately under-order; expiry is worse than a lost sale. Same engine, opposite instinct, and nobody has to explain the difference to it</td></tr>
+</table></div>
+
+<h2 id="config">Groceries and sunglasses: the same agent</h2>
+<p>This is the claim worth testing, so here is the entire difference between the two businesses, expressed as configuration. No code change, no new agent, no retraining of people.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Config key</th><th>Sunglasses</th><th>Supermarket, fresh</th><th>Linen</th></tr>
+<tr><td><code>review_period_days</code></td><td>14</td><td>1</td><td>7</td></tr>
+<tr><td><code>shelf_life_days</code></td><td>null</td><td>3 – 14</td><td>null</td></tr>
+<tr><td><code>markdown_curve</code></td><td><code>seasonal_end_of_summer</code></td><td><code>linear_from_day_1</code></td><td><code>none</code></td></tr>
+<tr><td><code>service_level</code></td><td>derived, typically 0.93 – 0.97</td><td>derived, typically 0.25 – 0.45</td><td>derived, 0.90 – 0.96</td></tr>
+<tr><td><code>cover_cap_weeks</code></td><td>26 (a season)</td><td>0.3 (two days)</td><td>16</td></tr>
+<tr><td><code>trigger</code></td><td>schedule + stockout risk</td><td>daily schedule + delivery window</td><td>schedule + verdict published</td></tr>
+<tr><td><code>seasonality_model</code></td><td>annual, strong</td><td>day-of-week, strong</td><td>mild annual</td></tr>
+<tr><td><code>substitution_group</code></td><td>frame colour</td><td>brand within category</td><td>colour and size</td></tr>
+<tr><td><code>autonomy.auto_execute_below</code></td><td>€2,000</td><td>€500 (many small orders)</td><td>€2,000</td></tr>
+</table></div>
+<p>What stays identical: the censored-demand reconstruction, the substitution logic, the newsvendor quantity engine, the evidence requirement, the tier ladder, the maker-checker, the backtest gate before going live, and the audit trail. A new vertical is a configuration file and a set of adapters, which is exactly why one small team can run several of them.</p>
+
+<h2 id="harness">The harness for this agent</h2>
+<p>The full specification is on <a href="deeper.html#harness">the operating-rules page</a>. Three properties are worth repeating here because they are what make an autonomous buyer acceptable:</p>
+<div class="table-wrap"><table>
+<tr><th>Property</th><th>Mechanism</th><th>Consequence</th></tr>
+<tr><td>The model never computes a quantity</td><td>Quantities come from the deterministic engine. The model selects among supplier options, consolidates orders, and writes the rationale</td><td>Every order is reproducible and defensible; the forecast is testable against history</td></tr>
+<tr><td>Nothing is bought without evidence ids</td><td>Verification stage rejects any rationale containing an uncited number</td><td>A buyer reviewing the order can click from "80 units of demand" to the query that produced it</td></tr>
+<tr><td>Earned autonomy</td><td>Shadow mode first: the agent proposes for 30 real decisions and is compared with the human. It moves to auto-execute below €2,000 only after matching or beating them, with a clean guard record</td><td>Autonomy is a measured outcome, not a configuration flag someone switched on hopefully</td></tr>
+</table></div>
+
+<div class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant CR as Cron / trigger
+  participant RA as Reorder agent (harness)
+  participant EN as Demand + quantity engines
+  participant GW as Action Gateway (policy, tiers)
+  participant CK as Checker agent
+  participant SL as Supplier liaison
+  participant TPL as 3PL
+  CR->>RA: reorder.due(sku_batch) via work_queue
+  RA->>EN: reconstruct_demand(sku, 365d panel)
+  EN-->>RA: P10/P50/P90 + evidence ids
+  RA->>EN: order_up_to(service_level from margin)
+  EN-->>RA: qty, cover after order
+  RA->>RA: consolidate by supplier, pick price break, write rationale
+  RA->>GW: propose_reorder{qty, need_by, evidence[]}
+  GW->>GW: schema → OPA policy → tier by value → cash and cover checks
+  alt value < €2,000 and all guards pass
+    GW-->>RA: executed (idempotent)
+  else €2,000 – €10,000
+    GW->>CK: independent re-derivation from the same evidence
+    CK-->>GW: agree / disagree with reasons
+    GW-->>RA: executed or escalated
+  else above €10,000 or any T3 condition
+    GW->>GW: human signal required, safe default = do nothing
+  end
+  GW->>SL: po.created → EDI, portal or email + PDF
+  SL->>TPL: inbound ASN
+  TPL-->>EN: receipt → updates observed lead-time distribution
+</script>
+</div>
+
+<h2 id="tools">Third-party selections for this agent</h2>
+<div class="table-wrap"><table>
+<tr><th>Need</th><th>Decision</th><th>Monthly</th><th>Reasoning</th></tr>
+<tr><td>Inventory and order truth</td><td><span class="tag buy">Buy</span> Shopify Admin API (GraphQL), webhooks + hourly snapshot</td><td>included</td><td>Already the system of record. The snapshot job is ours because the retention we need does not exist</td></tr>
+<tr><td>Replenishment reporting</td><td><span class="tag build">Build</span> the decision; <span class="tag buy">Buy</span> Inventory Planner or Prediko only as a cross-check</td><td>€0 – €250</td><td>These tools are good at reporting and weak exactly where the towel case lives: they forecast the sales series, not reconstructed demand, and they cannot recover availability history they never stored. Buying one as a second opinion is cheap; buying one as the decision-maker reproduces the error</td></tr>
+<tr><td>Forecasting runtime</td><td><span class="tag build">Build</span> Python job on the same VM: statsforecast, LightGBM, scikit-learn</td><td>€0</td><td>At a few hundred variants the nightly fit takes minutes on 4 vCPU. Azure ML becomes worthwhile when there are models to govern, not before</td></tr>
+<tr><td>Supplier exchange</td><td><span class="tag build">Build</span> email + PDF + portal adapters; <span class="tag buy">Buy</span> Orderful-class EDI when mandated</td><td>€0 → €400</td><td>Small linen and eyewear suppliers do not run EDI. The ladder is described in <a href="suppliers.html">the supplier integration ladder</a></td></tr>
+<tr><td>Document extraction</td><td><span class="tag buy">Buy</span> Claude Haiku structured output; Azure Document Intelligence if table-heavy invoices appear</td><td>€20</td><td>Supplier confirmations and invoices arrive as PDFs. Per-field confidence, and anything below threshold goes to a human</td></tr>
+<tr><td>Fulfilment and receipts</td><td><span class="tag buy">Buy</span> 3PL with an API</td><td>per order</td><td>Receipt timestamps are what make the lead-time distribution real rather than the supplier's promise</td></tr>
+<tr><td>Landed cost and books</td><td><span class="tag buy">Buy</span> Xero; <span class="tag build">Build</span> the landed-cost calculation</td><td>€40</td><td>Freight, duty and FX allocated per unit, because the margin figure that drives the service level has to be true</td></tr>
+</table></div>
+
+<h2 id="fail">Failure modes, and what catches each</h2>
+<div class="table-wrap"><table>
+<tr><th>Failure</th><th>Mechanism</th><th>Control</th></tr>
+<tr><td>One viral day becomes the forecast</td><td>A single spike dominates a short series and the agent buys a year of stock</td><td>Winsorised baseline, anomaly days flagged and excluded, and a hard cover cap of 16 weeks that no rationale can override</td></tr>
+<tr><td>Snapshot job silently dies</td><td>Availability looks constant, so censoring correction quietly switches off</td><td>Freshness monitor on <code>inventory_snapshot</code>; a gap over 3 hours blocks reorder proposals rather than degrading them</td></tr>
+<tr><td>New variant with no history</td><td>Model has nothing to fit, so any number is arbitrary</td><td><code>min_history_days: 28</code>. Below that the agent proposes a <em>test buy</em> sized to the experiment budget, never a bulk buy</td></tr>
+<tr><td>Supplier changes MOQ or price silently</td><td>The order is priced on stale terms</td><td>Terms re-verified against the latest confirmation; any delta becomes an amendment proposal with its own tier</td></tr>
+<tr><td>Cash committed faster than it comes in</td><td>Several agents each stay within their own limit while together breaching the runway</td><td>Portfolio-level open-to-buy and a 12-week cash runway floor checked in the gateway, not in any agent</td></tr>
+<tr><td>Double ordering on retry</td><td>A transient failure re-runs the proposal</td><td>Idempotency key = hash(sku, supplier, need_by period); the gateway returns the original result</td></tr>
+<tr><td>Model regression after a retrain</td><td>A worse model silently ships</td><td>Publish is blocked if backtest error regresses more than 15%; the last good model stays live and an anomaly is raised</td></tr>
+<tr><td>Demand estimate contradicts the lower bound</td><td>Model says 20, back-in-stock sign-ups say at least 60</td><td>Disagreement over 50% escalates the variant to a human with both figures and the evidence, rather than resolving it silently</td></tr>
+</table></div>
+
+<div class="callout info"><span class="t">What the buyer actually receives</span>
+<p>One proposal per supplier per cycle: the lines, the quantities, the cover after arrival, the capital committed, and for every quantity a one-line reason of the form <em>"black towel: 0.91/day over 22 available days, 41 back-in-stock sign-ups, substitution-corrected demand 80 ±14, 90% service level, 60 units at case pack 12, 9.9 weeks cover"</em> — each number clickable back to the query that produced it. That is the difference between an autonomous buyer and a black box.</p></div>
+
+</div></main>
+</body>
+</html>

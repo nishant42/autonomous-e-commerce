@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autonomous Commerce Architecture</title>
+<meta name="description" content="Architecture for a fully autonomous, AI-agent-operated premium home linen e-commerce company.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Architecture case study</div>
+<h1>Running a premium linen company with no humans in daily operations</h1>
+<p class="lede">
+  This is the architecture for <strong>Halden Home</strong>, a fictional D2C brand selling premium bedding and towels.
+  Yves Delorme is one of its suppliers; that relationship is hypothetical.
+  AI agents run every day-to-day decision: selling, forecasting, buying, pricing, marketing, service, finance and exceptions.
+  Physical warehousing and last-mile delivery are outsourced to a 3PL.
+</p>
+
+<div class="tldr">
+  <span class="t">The design in six sentences</span>
+  <ul>
+    <li><strong>Agents propose, deterministic systems dispose.</strong> No agent writes to a database or calls a vendor directly. Every side effect is a typed <em>Action Proposal</em> sent to an <strong>Action Gateway</strong>. The gateway enforces policy, limits, idempotency and audit.</li>
+    <li><strong>Each job gets the cheapest tool that can do it reliably.</strong> Deterministic code handles money and stock. ML handles forecasting and elasticity. Rules and policy handle limits. LLMs handle language, ambiguity and messy supplier documents.</li>
+    <li><strong>Events are the nervous system and Postgres is the memory.</strong> An append-only Ops Ledger, a transactional outbox and a message bus keep shared state consistent. Durable workflows (Temporal) run the long processes, such as a purchase order that takes 21 days.</li>
+    <li><strong>A thin in-house harness wraps every agent.</strong> It handles context assembly, a bounded tool loop, validation, a maker-checker verifier, memory hygiene and tracing. The model decides <em>intent</em>. The harness decides whether that intent is <em>valid</em>.</li>
+    <li><strong>Autonomy is tiered and budgeted.</strong> Each action carries a risk tier (T0-T3) and a spend, price or refund envelope. Anomaly detection can quarantine one agent, and kill switches stop a whole domain, without stopping the business.</li>
+    <li><strong>We buy commodity systems and build the brain.</strong> Shopify, Stripe, the 3PL, accounting, EDI and marketing tools are bought. The agent runtime, Action Gateway, Ops Ledger, planning models and supplier adapters are built.</li>
+  </ul>
+</div>
+
+<h2 id="principles">Architectural principles</h2>
+<div class="grid g2">
+  <div class="card"><h4>1 · LLMs never own the truth</h4><p>Quantities, prices, balances and stock levels are always computed by deterministic code or ML and read through tools. An LLM may explain a number or choose between options. It never invents one.</p></div>
+  <div class="card"><h4>2 · Single writer per aggregate</h4><p>Each domain service owns its tables. Agents act only through the Action Gateway. Two agents can never race on the same purchase order or price.</p></div>
+  <div class="card"><h4>3 · Fail loud, never silently "fix"</h4><p>If an agent's output fails validation, the error goes back to the agent so it can self-correct, or the task escalates. The harness never quietly substitutes its own guess, because a hidden fallback also hides the defect.</p></div>
+  <div class="card"><h4>4 · Every action is replay-safe</h4><p>Idempotency keys, durable workflows and the outbox pattern mean a retry can never produce a second PO, refund or charge.</p></div>
+  <div class="card"><h4>5 · Least privilege per agent</h4><p>Each agent has its own workload identity, scoped tools and short-lived tokens. Secrets never enter a prompt. Credentials are attached by the gateway at call time.</p></div>
+  <div class="card"><h4>6 · Humans set the envelope, not the decisions</h4><p>Owners set budgets, margin floors and policies. A human sees only true exceptions, targeted at under 1% of decisions. "No humans in normal operations" is a measured SLO, not a slogan.</p></div>
+</div>
+
+<h2 id="context">Business context and sizing assumptions</h2>
+<p>These assumptions size the design. The architecture scales about 10× on the same components.</p>
+<div class="grid g4">
+  <div class="card stat"><div class="v">~400</div><div class="l">orders / day (peaks 3-5×)</div></div>
+  <div class="card stat"><div class="v">~1,500</div><div class="l">active SKUs across 4-6 suppliers</div></div>
+  <div class="card stat"><div class="v">€180</div><div class="l">average order value</div></div>
+  <div class="card stat"><div class="v">2</div><div class="l">3PL nodes (UK and EU)</div></div>
+</div>
+<div class="table-wrap"><table>
+  <tr><th>Characteristic</th><th>Implication for architecture</th></tr>
+  <tr><td>Premium, brand-controlled supplier (Yves Delorme): MAP pricing, seasonal collections, lead times of 3-8 weeks</td><td>Procurement must plan ahead of demand. Pricing agents must respect supplier price policies (hard rule). Discounting is constrained.</td></tr>
+  <tr><td>Long-tail catalogue: size × colour × collection</td><td>Hierarchical forecasting (collection → product → variant). Many variants have sparse sales history.</td></tr>
+  <tr><td>Suppliers with uneven digital maturity</td><td>A supplier adapter "ladder" (API → EDI → portal → email → files → browser automation) behind one interface.</td></tr>
+  <tr><td>High AOV, low order count</td><td>Fraud, chargebacks and refunds matter more per order. Customer experience is a brand asset, so tone guardrails are needed.</td></tr>
+  <tr><td>Seasonality (Q4 gifting, January white sale, spring collections)</td><td>Forecast features. Marketing and inventory feedback loop. Cash-flow planning for pre-season buys.</td></tr>
+</table></div>
+
+<h2 id="map">How to read this site</h2>
+<p>Sections 01-11 map one-to-one to the requested deliverable. Deep dives A-H give the production detail behind them: harness internals, LLD, identity, grounding, reliability, evaluation and cost.</p>
+<div class="grid g3">
+  <a class="card" href="domain.html"><span class="n">01</span><h4>Company / domain</h4><p>Departments as bounded contexts, and who owns what data.</p></a>
+  <a class="card" href="agents.html"><span class="n">02</span><h4>Agent hierarchy</h4><p>About 30 agents: what each does, reads, can do, and which technique it uses.</p></a>
+  <a class="card" href="hld.html"><span class="n">03</span><h4>Technical architecture</h4><p>HLD: control plane, agent runtime, gateway, data and integration planes.</p></a>
+  <a class="card" href="data.html"><span class="n">04</span><h4>Shared state</h4><p>Ops Ledger, outbox, event contracts, projections and agent memory.</p></a>
+  <a class="card" href="orchestration.html"><span class="n">05</span><h4>Orchestration</h4><p>Choreography vs orchestration, durable workflows and agent-to-agent messaging.</p></a>
+  <a class="card" href="flows.html"><span class="n">06</span><h4>Key flows</h4><p>Demand→finance procurement loop and the marketing feedback loop.</p></a>
+  <a class="card" href="security.html"><span class="n">07</span><h4>Security & failsafes</h4><p>Limits, tiers, quarantine, kill switches and audit.</p></a>
+  <a class="card" href="build-vs-buy.html"><span class="n">08</span><h4>Build vs buy</h4><p>What we integrate, what we build, and why.</p></a>
+  <a class="card" href="stack.html"><span class="n">09</span><h4>Technology stack</h4><p>The concrete, Azure-centred proposal.</p></a>
+  <a class="card" href="tradeoffs.html"><span class="n">10</span><h4>Trade-offs</h4><p>The decisions that could reasonably go the other way.</p></a>
+  <a class="card" href="scenario.html"><span class="n">11</span><h4>Scenario: 3× towel</h4><p>Minute-by-minute walkthrough across every domain.</p></a>
+  <a class="card" href="harness.html"><span class="n">A</span><h4>Agent harness</h4><p>The seven stages that make a stateless model safe to run a company.</p></a>
+</div>
+
+<h2 id="glossary">Vocabulary used throughout</h2>
+<div class="table-wrap"><table>
+  <tr><th>Term</th><th>Meaning</th></tr>
+  <tr><td><strong>Agent</strong></td><td>A stateless reasoning worker (LLM, ML or rules) with a declared mandate, tool allow-list and identity. It is invoked by events or workflows.</td></tr>
+  <tr><td><strong>Harness</strong></td><td>The deterministic runtime around a model. It assembles context, runs the bounded tool loop, validates outputs, persists memory and emits traces.</td></tr>
+  <tr><td><strong>Action Proposal</strong></td><td>A typed, signed request for a side effect, e.g. <code>CreatePurchaseOrder</code>. Agents emit it; only the Action Gateway executes it.</td></tr>
+  <tr><td><strong>Action Gateway</strong></td><td>The one choke point for side effects. It checks policy, limits, idempotency, validation, tiered approval and audit.</td></tr>
+  <tr><td><strong>Ops Ledger</strong></td><td>The operational system of record, on Postgres: inventory positions, POs, prices, proposals and an append-only event log.</td></tr>
+  <tr><td><strong>Risk tier (T0-T3)</strong></td><td>T0 auto-execute · T1 auto + post-hoc sampling · T2 requires verifier agent / panel · T3 requires human exception review.</td></tr>
+  <tr><td><strong>Envelope</strong></td><td>The owner-approved limits an agent works inside: spend per day, maximum discount, refund ceiling, and so on.</td></tr>
+</table></div>
+
+<footer class="site">Halden Home is a fictional company created for this case study. The supplier relationship with Yves Delorme is hypothetical. Cost figures are indicative estimates.</footer>
+</div></main>
+</body>
+</html>

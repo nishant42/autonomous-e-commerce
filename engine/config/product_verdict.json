@@ -1,0 +1,32 @@
+{
+  "agent": "product_verdict",
+  "version": 3,
+  "model": {
+    "plan": "claude-sonnet-5-5",
+    "max_steps": 25,
+    "token_budget_month": 400000,
+    "max_tokens_per_decision": 16000
+  },
+  "reads": [
+    "funnel_rates",
+    "ad_metrics_panel",
+    "margin_table",
+    "stock_cover",
+    "experiment_budget",
+    "returns_by_variant",
+    "portfolio_memory",
+    "evidence_pack"
+  ],
+  "writes": [
+    "publish_verdict",
+    "raise_anomaly"
+  ],
+  "policy": {
+    "min_sessions": 1500,
+    "min_spend_eur": 400,
+    "payback_factor": 1.2,
+    "experiment_budget_eur": 1500,
+    "kill_requires_human": true,
+    "window_days": 14
+  }
+}

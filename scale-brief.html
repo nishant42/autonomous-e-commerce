@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scaling Brief</title>
+<meta name="description" content="Presenter view: how the sunglasses platform scales in four phases, which components each phase adds and what they cost per month.">
+<link rel="stylesheet" href="assets/style.css?v=20261025c">
+<style>
+  body { background: var(--bg); color: var(--fg); margin: 0; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 24px 60px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .top a { font-weight: 600; font-size: 14px; }
+  .top .keys { font-size: 12.5px; color: var(--fg-faint); }
+  h1 { font-size: clamp(26px, 3.4vw, 40px); letter-spacing: -.02em; margin: 0 0 6px; }
+  .sub { color: var(--fg-muted); font-size: 16px; margin: 0 0 18px; }
+  .heads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 22px; }
+  .head { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+  .head b { display: block; font-family: var(--display); font-size: 26px; letter-spacing: -.02em; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .head span { font-size: 13px; color: var(--fg-muted); }
+  .ladder { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; }
+  .ladder button { height: 34px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg-muted); font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
+  .ladder button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .ladder button.all { margin-left: auto; }
+  .phases { display: grid; gap: 16px; }
+  .phase { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 18px; padding: 20px 22px; box-shadow: var(--shadow); scroll-margin-top: 16px; }
+  .phase[hidden] { display: none; }
+  .ph-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px; }
+  .ph-head h2 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+  .ph-head h2 small { font-size: 15px; color: var(--fg-faint); font-weight: 500; margin-left: 8px; }
+  .stage { font-size: 13.5px; font-weight: 650; color: var(--accent); background: var(--accent-soft); padding: 4px 12px; border-radius: 99px; }
+  .ph-body { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; }
+  .ph-body h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-faint); margin: 0 0 8px; }
+  .comp { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .comp li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; font-size: 16.5px; line-height: 1.35; margin: 0; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+  .comp li:last-child { border-bottom: 0; }
+  .comp li .new { font-size: 11px; font-weight: 700; color: var(--ok); background: var(--ok-soft); padding: 1px 7px; border-radius: 99px; margin-left: 6px; vertical-align: 2px; }
+  .comp li em { font-style: normal; color: var(--fg-faint); font-size: 14px; }
+  .comp li b { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .why { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 7px; }
+  .why li { font-size: 16.5px; line-height: 1.4; margin: 0; padding-left: 20px; position: relative; }
+  .why li::before { content: "→"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+  .flow { font-family: var(--mono); font-size: 13px; line-height: 1.55; background: var(--bg-sunk); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; white-space: pre; overflow-x: auto; color: var(--fg-muted); }
+  .tot { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .tot div { background: var(--bg-sunk); border-radius: 12px; padding: 10px 12px; }
+  .tot b { display: block; font-family: var(--display); font-size: 20px; font-variant-numeric: tabular-nums; }
+  .tot span { font-size: 12.5px; color: var(--fg-muted); }
+  .tot div.main b { color: var(--accent); }
+  .next { margin-top: 12px; font-size: 15px; color: var(--fg-muted); }
+  .next b { color: var(--fg); }
+  .end { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+  .card2 { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 18px; padding: 18px 22px; }
+  .card2 h2 { margin: 0 0 10px; font-size: 21px; }
+  table.sum { width: 100%; border-collapse: collapse; font-size: 15px; }
+  table.sum th, table.sum td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  table.sum td.n, table.sum th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scen { font-size: 14px; color: var(--fg-muted); margin: -8px 0 16px; }
+  .note { font-size: 12.5px; color: var(--fg-faint); margin-top: 14px; }
+  @media (max-width: 900px) { .heads { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ph-body, .end { grid-template-columns: minmax(0, 1fr); } .ladder button.all { margin-left: 0; } }
+  @media print { .ladder, .top .keys { display: none; } .phase[hidden] { display: block; } .phase { break-inside: avoid; box-shadow: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a href="scale.html">← Full scale plan (interactive)</a>
+    <span class="keys">Keys: ← → switch phase · A show all · numbers are per month, from the same model</span>
+  </div>
+
+  <h1>Scaling in four phases</h1>
+  <p class="sub">The classic "zero to millions" path: add one component each time something becomes a bottleneck. Sunglasses, one million customers in 24 months. All costs per month, official prices.</p>
+
+  <p class="scen">Scenario: <b id="scen"></b> · change it in "Your inputs" on the <a href="scale.html">full plan</a></p>
+  <div class="heads">
+    <div class="head"><b id="h-tech"></b><span>technology / month, start → month 24</span></div>
+    <div class="head"><b id="h-cpo"></b><span>technology cost per order</span></div>
+    <div class="head"><b id="h-peak"></b><span>orders per second at the busiest hour (month 24)</span></div>
+    <div class="head"><b id="h-fees"></b><span>payment fees vs technology at month 24</span></div>
+  </div>
+
+  <div class="ladder" role="group" aria-label="Phases">
+    <button type="button" data-p="1" aria-pressed="true">1 · Test</button>
+    <button type="button" data-p="2" aria-pressed="false">2 · Traction</button>
+    <button type="button" data-p="3" aria-pressed="false">3 · Scale</button>
+    <button type="button" data-p="4" aria-pressed="false">4 · Million</button>
+    <button type="button" data-p="0" class="all" aria-pressed="false">Show all</button>
+  </div>
+
+  <div class="phases" id="phases"></div>
+
+  <div class="end">
+    <div class="card2">
+      <h2>Summary</h2>
+      <table class="sum"><thead><tr><th>Phase</th><th>Classic stage</th><th class="n">Orders/day</th><th class="n">Tech / month</th></tr></thead><tbody id="sum"></tbody></table>
+    </div>
+    <div class="card2">
+      <h2>Buy vs build (24 months)</h2>
+      <table class="sum"><thead><tr><th>Scenario</th><th class="n">Tech</th><th class="n">Fees</th><th class="n">Devs</th><th class="n">Total</th></tr></thead><tbody id="cmp"></tbody></table>
+      <h2 style="margin-top:18px">What I'd say last</h2>
+      <ul class="why">
+        <li><b>Same tools, bigger tiers:</b> no rewrites between phases</li>
+        <li><b>Upgrade on signals,</b> not dates (orders/day, DB CPU)</li>
+        <li><b>Sharding skipped on purpose:</b> under 1 order/sec; Shopify serves browsing</li>
+        <li><b>Second region is optional:</b> resilience, not speed</li>
+        <li><b>Real cost lever:</b> payment fees, not servers</li>
+        <li><b>AI:</b> Haiku simple · Sonnet writing · Opus money decisions</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Numbers use £60 average order and developers 1 / 1 / 2 / 4, with the storefront and email choice shown above. Every price on the full plan links to its official source.</p>
+</div>
+
+<script src="assets/price-evidence.js?v=20261025c"></script>
+<script src="assets/scale-model.js?v=20261025c"></script>
+<script>
+(function () {
+  const S = window.SCALE;
+  try { const saved = JSON.parse(localStorage.getItem("halden-scale-cfg") || "null"); if (saved) { ["storefront", "email", "p3Servers", "p4Servers", "p4Regions", "p4Db", "p4Storage"].forEach((k) => { if (saved[k] != null) S.CFG[k] = saved[k]; }); } } catch (e) {}
+  const OWN = S.CFG.storefront === "own";
+  const sesFrom = OWN || S.CFG.email === "ses" ? 1 : S.CFG.email === "ses3" ? 3 : 99;
+  const money = (v) => v >= 1e6 ? "£" + (v / 1e6).toFixed(1) + "M" : v >= 1e4 ? "£" + Math.round(v / 1000) + "k" : v >= 1e3 ? "£" + (v / 1000).toFixed(1) + "k" : v < 1 ? "<£1" : "£" + Math.round(v);
+  const num = (v) => v >= 1e3 ? (v / 1e3).toFixed(1).replace(/\.0$/, "") + "k" : String(Math.round(v));
+  const M = Array.from({ length: 24 }, (_, i) => S.month(i + 1));
+  const at = (m) => M[m - 1];
+  const c = (m, prefix) => at(m).items.filter((i) => i.name.startsWith(prefix) && i.active).reduce((s, i) => s + i.cost, 0);
+  const rng = (a, b) => (Math.abs(b - a) / Math.max(1, b) < 0.08 ? money(b) : money(a) + " → " + money(b));
+  const tl = (p, prefix) => rng(c(S.PHASES[p - 1].from, prefix), c(S.PHASES[p - 1].to, prefix));
+  const small = (m) => ["DNS", "Blob", "Secrets", "Feature flags", "Logs", "Outbound"].reduce((s, k) => s + c(m, k), 0);
+  const dev = (m) => ["Source control", "CI build", "AI coding", "Email, docs"].reduce((s, k) => s + c(m, k), 0);
+  const plan = (m) => at(m).items[0].what.split(" ")[0];
+  const ownStore = (m) => c(m, "Own storefront");
+  const shopRow = (p, label) => { const ph = S.PHASES[p - 1]; return OWN ? ["Own storefront", "CDN, cart API, logins (no Shopify)", rng(ownStore(ph.from), ownStore(ph.to)), p === 1] : [label, p === 2 ? "lower card fees pay for it" : "shop, checkout, payments", rng(c(ph.from, "Storefront"), c(ph.to, "Storefront"))]; };
+  const mailRow = (p, note) => { const ph = S.PHASES[p - 1]; return p >= sesFrom ? ["Amazon SES", note + " · $0.10 per 1k", rng(c(ph.from, "Email sending") + c(ph.from, "Marketing email"), c(ph.to, "Email sending") + c(ph.to, "Marketing email")), p === sesFrom] : ["Shopify Email", note, rng(c(ph.from, "Marketing email"), c(ph.to, "Marketing email"))]; };
+
+  // headline numbers
+  const m1 = at(1), m24 = at(24);
+  document.getElementById("h-tech").textContent = money(m1.tech) + " → " + money(m24.tech);
+  document.getElementById("h-cpo").textContent = "£" + (m1.tech / m1.orders).toFixed(2).replace(/^0/, "0") + " → " + Math.round((m24.tech / m24.orders) * 100) + "p";
+  document.getElementById("h-peak").textContent = m24.peakOrdersPerSec.toFixed(2);
+  document.getElementById("h-fees").textContent = money(m24.fees) + " vs " + money(m24.tech);
+
+  const P = [
+    { n: 1, stage: "Single server · separate DB · queue",
+      why: ["Smallest setup that is still production-ready", "Serverless: costs almost nothing when idle", "Shopify already gives CDN + checkout", "Database + queue from day one (hard to add later)"],
+      flow: "Shoppers → Shopify (shop · CDN · checkout)\n              ↓ order event\n        Container Apps (code + 11 agents)\n          ↓                 ↓\n     Postgres (small)   Service Bus\n          ↓\n     Claude AI · Temporal",
+      comps: () => [
+        shopRow(1, "Shopify " + plan(4)),
+        mailRow(1, "marketing email"),
+        ["Container Apps", "serverless app + agents", tl(1, "Production runtime")],
+        ["PostgreSQL B1ms", "orders, stock, audit", c(4, "Ops Ledger")],
+        ["Service Bus", "message queue", c(4, "Event bus")],
+        ["Temporal", "long jobs (POs)", tl(1, "Durable")],
+        ["Claude AI · 11 agents", "Haiku / Sonnet / Opus", tl(1, "LLM")],
+        ["Staging", "test copy", c(4, "Staging")],
+        ["Keys, logs, DNS, flags", "mostly free tiers", small(4)],
+        ["Dev tools", "GitHub, Claude Code, Workspace", dev(4)],
+        ["Xero", "accounting", c(4, "Accounting")],
+      ],
+      next: "Move on at: 3+ designs selling · 50+ orders/day for 2 weeks" },
+    { n: 2, stage: "Load balancer · failover · cache",
+      why: ["Single database = single point of failure", "One app copy = single point of failure", "Agents clash on spend counters → cache", "Public APIs need a firewall"],
+      flow: "Shopify → Front Door (load balancer + WAF)\n              ↓\n     Container Apps ×2 (stateless)\n      ↓              ↓            ↓\n Postgres ⇄ standby   Redis     Service Bus",
+      comps: () => [
+        ["Front Door Standard", "load balancer + firewall", c(9, "Edge"), true],
+        ["Container Apps ×2", "horizontal scaling", c(9, "Production runtime")],
+        ["PostgreSQL D2 + standby", "automatic failover", c(9, "Ops Ledger"), true],
+        ["Redis B1", "cache, spend limits", c(9, "Redis"), true],
+        ["Feature flags (Standard)", "kill switches", c(9, "Feature flags")],
+        shopRow(2, "Shopify " + plan(5) + " → " + plan(9)),
+        mailRow(2, "more customers"),
+        ["Claude AI · 19 agents", "+ forecasting, pricing", tl(2, "LLM")],
+        ["Temporal", "more workflows", tl(2, "Durable")],
+      ],
+      next: "Move on at: 500 orders/day · database busy at peaks" },
+    { n: 3, stage: "Bigger servers · zones · DR replica",
+      why: ["Constant load → dedicated servers are cheaper per unit", "Survive a whole data-centre outage", "Vertical scaling of the DB is still enough", "Security scanning before audits"],
+      flow: "Front Door\n     ↓\nContainer Apps · 3 dedicated servers · 3 zones\n     ↓\nPostgres D4 ⇄ standby ──► DR replica (UK West)\nRedis B5 · Service Bus · Temporal · Claude",
+      comps: () => [
+        ["Container Apps dedicated", S.CFG.p3Servers + " × D4 servers across zones", c(16, "Production runtime"), true],
+        ["PostgreSQL D4 + standby + DR", "bigger + second region copy", c(16, "Ops Ledger"), true],
+        ["Redis B5", "bigger cache", c(16, "Redis")],
+        ["Defender for Containers", "security scanning", c(16, "Container security"), true],
+        ["Staging (bigger)", "matches production", c(16, "Staging")],
+        shopRow(3, "Shopify Plus"),
+        mailRow(3, "1.6M emails/mo"),
+        ["Claude AI · 29 agents", "+ demand sensing, audit", tl(3, "LLM")],
+        ["Logs + Temporal", "growing with orders", rng(c(10, "Logs") + c(10, "Durable"), c(16, "Logs") + c(16, "Durable"))],
+      ],
+      next: "Move on at: 2,000 orders/day · 10× load test passed" },
+    { n: 4, stage: S.CFG.p4Regions === 2 ? "Multi-region (no sharding)" : "Lean single region (no sharding)",
+      why: S.CFG.p4Regions === 2 ? ["Three markets: UK, EU, US", "Survive a whole Azure region failing", "One write database: simpler, no money conflicts", "Partition by month instead of sharding"]
+        : ["Under 1 order/sec: one region is enough", "Three zones + DR copy cover data-centre failure", "Second region optional (contract/regulator)", "Scale up only when CPU stays above 60%"],
+      flow: S.CFG.p4Regions === 2 ? "Front Door (routes to healthy region)\n     ↓                         ↓\n UK South                   US East\n " + S.CFG.p4Servers + " servers · Redis          " + S.CFG.p4Servers + " servers · Redis\n Postgres " + S.CFG.p4Db + " ⇄ standby ──►  geo-replica\n        Claude AI · Temporal (shared)"
+        : "Front Door Premium\n     ↓\nContainer Apps · " + S.CFG.p4Servers + " servers · 3 zones (UK South)\n     ↓\nPostgres " + S.CFG.p4Db + " ⇄ standby ──► DR copy (UK West)\nRedis · Service Bus · Temporal · Claude",
+      comps: () => [
+        ["Container Apps", at(24).items.find((i) => i.name.startsWith("Production runtime")).what.replace("Dedicated · ", ""), c(24, "Production runtime")],
+        ["PostgreSQL " + S.CFG.p4Db, at(24).items.find((i) => i.name.startsWith("Ops Ledger")).what.replace(/^D\dds_v5 \+ /, ""), c(24, "Ops Ledger")],
+        ["Front Door Premium", S.CFG.p4Regions === 2 ? "region routing, managed WAF, bots" : "managed WAF rules, bots", c(24, "Edge")],
+        ["Redis" + (S.CFG.p4Regions === 2 ? " × 2 regions" : " B5"), "", c(24, "Redis")],
+        shopRow(4, "Shopify Plus"),
+        mailRow(4, "6.4M emails/mo"),
+        ["Claude AI · 33 agents", "+ localisation, marketplace", tl(4, "LLM")],
+        ["Temporal", "8M steps/mo", tl(4, "Durable")],
+        ["Logs, security, registry", "", rng(c(17, "Logs") + c(17, "Container security") + c(17, "Container registry"), c(24, "Logs") + c(24, "Container security") + c(24, "Container registry"))],
+      ],
+      next: S.CFG.p4Regions === 2 ? "Note: second region chosen; it doubles servers, Redis and Service Bus" : "Optional: second region only if a contract or regulator needs it" },
+  ];
+
+  const box = document.getElementById("phases");
+  box.innerHTML = P.map((ph) => {
+    const p = S.PHASES[ph.n - 1], a = at(p.from), b = at(p.to);
+    const comps = ph.comps().map(([n, d, v, isNew]) => "<li><span>" + n + (isNew ? '<span class="new">new</span>' : "") + (d ? " <em>· " + d + "</em>" : "") + "</span><b>(" + (typeof v === "number" ? money(v) : v) + ")</b></li>").join("");
+    return '<section class="phase" id="ph' + ph.n + '" data-p="' + ph.n + '"' + (ph.n === 1 ? "" : " hidden") + ">" +
+      '<div class="ph-head"><h2>' + ph.n + " · " + p.name + "<small>months " + p.from + "–" + p.to + " · " + num(a.ordersPerDay) + " → " + num(b.ordersPerDay) + ' orders/day</small></h2><span class="stage">' + ph.stage + "</span></div>" +
+      '<div class="ph-body"><div><h3>Components (per month)</h3><ul class="comp">' + comps + "</ul></div>" +
+      "<div><h3>Why this phase</h3><ul class=\"why\">" + ph.why.map((w) => "<li>" + w + "</li>").join("") + "</ul>" +
+      '<div class="flow">' + ph.flow + "</div>" +
+      '<div class="tot"><div class="main"><b>' + rng(a.tech, b.tech) + "</b><span>technology / month</span></div><div><b>" + rng(a.llm.cost, b.llm.cost) + "</b><span>of which AI</span></div><div><b>" + money(b.teamCost) + "</b><span>developers / month</span></div></div>" +
+      '<p class="next"><b>' + ph.next.split(":")[0] + ":</b>" + ph.next.split(":").slice(1).join(":") + "</p></div></div></section>";
+  }).join("");
+
+  document.getElementById("sum").innerHTML = P.map((ph) => {
+    const p = S.PHASES[ph.n - 1], a = at(p.from), b = at(p.to);
+    return "<tr><td>" + ph.n + " · " + p.name + "</td><td>" + ph.stage + '</td><td class="n">' + num(a.ordersPerDay) + "–" + num(b.ordersPerDay) + '</td><td class="n"><b>' + rng(a.tech, b.tech) + "</b></td></tr>";
+  }).join("");
+
+  document.getElementById("scen").textContent = (OWN ? "Own storefront" : "Shopify") + " · " + (sesFrom === 1 ? "Amazon SES from day one" : sesFrom === 3 ? "Amazon SES from phase 3" : "Shopify Email");
+  (function () {
+    const keep = { st: S.CFG.storefront, em: S.CFG.email };
+    const rows = [["Shopify + Shopify Email", "shopify", "shopify"], ["Shopify + SES (phase 3)", "shopify", "ses3"], ["Own storefront + SES", "own", "ses"]].map(([l, st, em]) => {
+      S.CFG.storefront = st; S.CFG.email = em; let t = 0, f = 0, d = 0;
+      for (let m = 1; m <= 24; m++) { const q = S.month(m); t += q.tech; f += q.fees; d += q.teamCost; }
+      return { l, t, f, d, tot: t + f + d };
+    });
+    S.CFG.storefront = keep.st; S.CFG.email = keep.em;
+    const best = Math.min(...rows.map((r) => r.tot));
+    document.getElementById("cmp").innerHTML = rows.map((r) => "<tr><td>" + r.l + (r.tot === best ? " ✓" : "") + '</td><td class="n">' + money(r.t) + '</td><td class="n">' + money(r.f) + '</td><td class="n">' + money(r.d) + '</td><td class="n"><b>' + money(r.tot) + "</b></td></tr>").join("");
+  })();
+
+  // phase switching
+  const btns = document.querySelectorAll(".ladder button");
+  let cur = 1;
+  function show(p) {
+    cur = p;
+    btns.forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.p === p)));
+    document.querySelectorAll(".phase").forEach((s) => (s.hidden = p !== 0 && +s.dataset.p !== p));
+  }
+  btns.forEach((b) => b.addEventListener("click", () => show(+b.dataset.p)));
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest("input, select, textarea")) return;
+    if (e.key === "ArrowRight") show(cur >= 4 || cur === 0 ? 1 : cur + 1);
+    else if (e.key === "ArrowLeft") show(cur <= 1 ? 4 : cur - 1);
+    else if (e.key.toLowerCase() === "a") show(0);
+  });
+})();
+</script>
+</body>
+</html>

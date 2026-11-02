@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build vs Buy</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">08 · Build vs buy</div>
+<h1>Buy the plumbing, build the brain and the brakes</h1>
+<p class="lede">The rule: <strong>buy</strong> where the problem is solved, regulated or commoditised, such as checkout, payments, statutory accounting, warehousing and EDI transport. <strong>Build</strong> where the company's advantage or safety lives: the decision logic, the agent runtime, the Action Gateway and the operational ledger that ties it all together.</p>
+
+<div class="diagram">
+<script type="text/x-mermaid">
+quadrantChart
+  title Differentiation vs availability of good products
+  x-axis "Mature market products" --> "No fit-for-purpose product"
+  y-axis "Commodity" --> "Differentiating"
+  quadrant-1 "BUILD"
+  quadrant-2 "BUY + configure deeply"
+  quadrant-3 "BUY as-is"
+  quadrant-4 "BUILD thin / compose"
+  "Action Gateway": [0.9, 0.9]
+  "Agent harness": [0.78, 0.86]
+  "Ops Ledger": [0.82, 0.72]
+  "Replenishment logic": [0.7, 0.82]
+  "Supplier adapters": [0.72, 0.55]
+  "Forecast models": [0.55, 0.78]
+  "Workflow engine": [0.2, 0.4]
+  "Shopify": [0.1, 0.5]
+  "Klaviyo / Gorgias": [0.2, 0.46]
+  "Stripe": [0.08, 0.3]
+  "Accounting": [0.12, 0.2]
+  "3PL / WMS": [0.2, 0.22]
+  "EDI network": [0.3, 0.14]
+  "Observability": [0.25, 0.3]
+</script>
+</div>
+<p class="caption">Figure 8.1: Positioning. Upper-right is where custom engineering pays back.</p>
+
+<h2>Decision table</h2>
+<div class="table-wrap"><table>
+<tr><th>Capability</th><th>Decision</th><th>Choice</th><th>Rationale</th><th>Exit / lock-in mitigation</th></tr>
+<tr><td>Storefront, checkout, catalogue, orders</td><td><span class="tag buy">Buy</span></td><td>Shopify Plus</td><td>Best-in-class conversion, PCI scope removed, strong APIs and webhooks, and an app ecosystem. UI is explicitly not the differentiator.</td><td>Ops Ledger keeps our own order projection; the catalogue is mastered from our product data.</td></tr>
+<tr><td>Payments, fraud baseline, payouts</td><td><span class="tag buy">Buy</span></td><td>Stripe (+ Radar)</td><td>Regulated. Native idempotency keys. Rich balance-transaction data for reconciliation.</td><td>A payment abstraction in the adapter layer.</td></tr>
+<tr><td>ERP</td><td><span class="tag buy">Buy lean</span> + <span class="tag build">Build</span></td><td>No monolithic ERP on day one. Accounting SaaS plus our Ops Ledger. Move to NetSuite / Business Central above ~€30M GMV.</td><td>Classic ERPs assume human clerks and batch UIs. Our operational core must be event-driven and agent-native. Statutory books still go to a compliant product.</td><td>The Ledger publishes standard journals, so the accounting target can be swapped.</td></tr>
+<tr><td>WMS / 3PL</td><td><span class="tag buy">Buy</span></td><td>API-first 3PL with UK and EU nodes</td><td>Physical operations are outsourced by requirement. Choose on API quality: webhooks for receipts and shipments, stock snapshots, inbound ASN API.</td><td>A 3PL adapter contract; dual-node design lets us move one node at a time.</td></tr>
+<tr><td>Accounting</td><td><span class="tag buy">Buy</span></td><td>Xero (at this scale) → Business Central / NetSuite later</td><td>VAT, statutory reporting and auditors expect it. The agent posts through the API.</td><td>Journals originate in the Ledger.</td></tr>
+<tr><td>Helpdesk</td><td><span class="tag buy">Buy</span></td><td>Gorgias (Shopify-native)</td><td>Channels (email, chat, social), ticket UI for the rare human, macros as a fallback.</td><td>Resolution logic lives in our agents, not in helpdesk rules.</td></tr>
+<tr><td>CRM / email / SMS</td><td><span class="tag buy">Buy</span></td><td>Klaviyo</td><td>Deliverability, consent and segmentation are solved problems.</td><td>Segments are defined from our lakehouse and synced out.</td></tr>
+<tr><td>Ads platforms</td><td><span class="tag buy">Buy</span> (use)</td><td>Google, Meta APIs</td><td>n/a</td><td>The Budget Allocator is ours, so channel strategy is portable.</td></tr>
+<tr><td>EDI transport</td><td><span class="tag buy">Buy</span></td><td>EDI-as-a-service (VAN / API-to-EDI provider)</td><td>Partner onboarding, AS2 and mappings are specialist, commoditised work.</td><td>We store canonical JSON; EDI is only an adapter format.</td></tr>
+<tr><td>Agent framework</td><td><span class="tag buy">Buy</span> runtime + <span class="tag build">Build</span> harness</td><td>Azure AI Foundry (models, agent service, evaluations, tracing) + thin in-house harness</td><td>We need full control of the tool loop, validation, memory hygiene and proposal semantics. Heavy frameworks hide exactly the parts that matter. Foundry supplies model hosting, safety and evaluations.</td><td>The harness talks to models through the gateway's OpenAI-compatible API, so it is model-portable.</td></tr>
+<tr><td>Workflow engine</td><td><span class="tag buy">Buy</span></td><td>Temporal Cloud</td><td>Durable execution, timers, sagas and replay are hard to build correctly.</td><td>Workflows are plain code; self-hosted Temporal is the fallback.</td></tr>
+<tr><td>Message bus</td><td><span class="tag buy">Buy</span></td><td>Azure Service Bus (+ Event Hubs)</td><td>Managed. Sessions for ordering, DLQ and geo-DR.</td><td>A CloudEvents envelope makes the bus swappable.</td></tr>
+<tr><td>Databases</td><td><span class="tag buy">Buy</span> (managed)</td><td>Azure Database for PostgreSQL, Azure Cache for Redis, ADLS / Fabric</td><td>Boring, proven, one skill set; pgvector avoids a separate vector DB.</td><td>Standard Postgres.</td></tr>
+<tr><td>Observability</td><td><span class="tag buy">Buy</span></td><td>OpenTelemetry → Azure Monitor / App Insights; Foundry tracing for LLM spans; Grafana</td><td>Standard. Vendor-neutral instrumentation.</td><td>OTel is portable.</td></tr>
+<tr><td><strong>Action Gateway + policy</strong></td><td><span class="tag build">Build</span></td><td>Service with OPA (policy engine bought, policies ours)</td><td>This is the safety core, specific to our action vocabulary.</td><td>n/a (core IP)</td></tr>
+<tr><td><strong>Ops Ledger</strong></td><td><span class="tag build">Build</span></td><td>Postgres schema + services</td><td>Joins vendor truths (Shopify, 3PL, Stripe) into one commercial truth.</td><td>n/a</td></tr>
+<tr><td><strong>Planning and pricing models</strong></td><td><span class="tag build">Build</span> on bought ML platform</td><td>Azure ML; open-source libraries</td><td>Forecasting sparse premium SKUs with supplier constraints is where money is made.</td><td>Models are versioned artefacts.</td></tr>
+<tr><td><strong>Supplier adapters</strong></td><td><span class="tag build">Build</span></td><td>API, EDI, portal (Playwright), email (Graph), files (SFTP)</td><td>Every supplier is different; this is where "no perfect API" is absorbed.</td><td>One internal contract across all channels.</td></tr>
+</table></div>
+
+<div class="callout warn"><span class="t">What I would specifically not buy</span>
+<p>An "AI agents for e-commerce" suite that owns decisions end to end. It would own our most important logic, hide the tool loop and the audit trail, and make our safety case depend on a vendor's prompt. We buy the model, not the judgement.</p></div>
+
+</div></main>
+</body>
+</html>

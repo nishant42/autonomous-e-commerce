@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operating Rules, Bus & Third Parties</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deeper · D0 · Operating rules</div>
+<h1>Ten cheap sites, one engine, and the rules that keep it honest</h1>
+<p class="lede">The earlier documents describe an architecture. This one commits to it: the named third parties and what they cost, the machine it runs on, the bus and the harness as contracts rather than boxes, and the decision rules written as numbers a reviewer can argue with. The test is not whether the diagram is elegant. It is whether a person who disagrees with a decision can find the rule that caused it.</p>
+
+<div class="tldr"><span class="t">What this layer adds</span>
+<ul>
+<li><strong>The product is the differentiator, not the site.</strong> Ten storefronts from one template, identical code, different content. The engineering budget goes into deciding what to stock, what to spend, and what to kill.</li>
+<li><strong>One small machine, Postgres as the bus.</strong> At ten products the queue is a Postgres table with <code>FOR UPDATE SKIP LOCKED</code>, not a message broker. The interface is written so the broker can arrive later without touching agent code.</li>
+<li><strong>Same agent, different config.</strong> A reorder agent for perishable groceries and one for sunglasses are the same code and the same loop. Shelf life, review period and service level are configuration, and this page shows the file.</li>
+<li><strong>Agents never call agents.</strong> They publish facts and propose actions. Everything that writes goes through one gateway with one policy file. This is what keeps five or six people in control of ten autonomous storefronts.</li>
+</ul>
+</div>
+
+<div class="callout info"><span class="t">This is implemented, not just described</span>
+<p>The engine in <code>engine/</code> runs these rules on 90 days of seeded history with no dependencies. <code>cd engine &amp;&amp; python3 run.py ui</code> opens an operator console at <code>127.0.0.1:8787</code> where a cycle can be run and watched job by job, proposals approved or rejected, and every number clicked back to the query that produced it. <code>python3 run.py demo</code> prints the same decisions in a terminal, and <a href="engine-run.html">this static snapshot</a> is what <code>run.py console</code> generates — the same decisions, read back out of the database, with every intermediate number, the gateway's verdict on each proposal and the full audit trail.</p></div>
+<div class="toc"><a href="#thesis">Portfolio economics</a><a href="#machine">The machine and the bill</a><a href="#bus">The bus, concretely</a><a href="#harness">The harness contract</a><a href="#rules">Interaction rules R1–R12</a><a href="#third">Third-party selections</a><a href="#oss">Buy, build, or open source</a><a href="#team">Who runs it</a><a href="#order">Build order</a></div>
+
+<h2 id="thesis">Portfolio economics: why the site must be cheap</h2>
+<p>The strategy is a portfolio bet. Ten products launch, two win, two are ambiguous, six die. The value of the system is not in making any one storefront beautiful. It is in <strong>shortening the time to a correct verdict</strong> and in <strong>spending nothing on the six that die</strong>.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Lever</th><th>Bad version</th><th>What this architecture does</th><th>Why it pays</th></tr>
+<tr><td>Cost of a launch</td><td>Bespoke site per product, two weeks of design</td><td>One template, content-only launch, under a day</td><td>Ten launches cost one launch</td></tr>
+<tr><td>Cost of a wrong keep</td><td>Three months of ad spend plus a reorder on a dead SKU</td><td>Fixed experiment budget per product, hard kill thresholds</td><td>This is the single largest avoidable loss in the model</td></tr>
+<tr><td>Cost of a wrong kill</td><td>A good product killed because the checkout was broken</td><td>The verdict agent separates product failure from site failure before it recommends a kill</td><td>Protects the two winners that pay for everything</td></tr>
+<tr><td>Cost of being slow</td><td>Monthly reviews by people reading spreadsheets</td><td>Daily guardrails, weekly reallocation, verdicts on a fixed clock</td><td>Compounding: the winner gets budget six weeks earlier</td></tr>
+</table></div>
+
+<div class="callout"><span class="t">The one metric the whole system optimises</span>
+<p>Not revenue, not ROAS. <strong>Contribution margin per order after advertising, returns and payment fees</strong> — and for the portfolio, <strong>contribution margin per euro of working capital per week</strong>. Every rule below resolves to one of those two. When two agents disagree, the arbitration is settled by whichever action improves the second number, because working capital is the binding constraint, not attention.</p></div>
+
+<h2 id="machine">The machine, and the bill that goes with it</h2>
+<p>Phase 1 runs on one small server plus managed Postgres. Deliberately boring, deliberately cheap, and sized so that a single person can hold the whole thing in their head.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Component</th><th>Choice</th><th>Spec</th><th>Monthly</th></tr>
+<tr><td>Application host</td><td>One VM (Hetzner CPX31, or Azure B2as if the client wants one cloud)</td><td>4 vCPU / 8 GB. Runs API, agent workers, cron, and the console behind Caddy</td><td>€15 – €55</td></tr>
+<tr><td>Database and bus</td><td>Managed Postgres 16 (Supabase, Neon, or Azure Flexible Server) with <code>pgvector</code></td><td>2 vCPU / 4 GB, PITR on. Holds the ledger, the queue, the snapshots and agent memory</td><td>€25 – €70</td></tr>
+<tr><td>Object storage</td><td>Cloudflare R2 or Azure Blob</td><td>Invoices, supplier PDFs, creative assets, nightly exports</td><td>€5</td></tr>
+<tr><td>Storefronts</td><td>Shopify Basic × 10</td><td>One store per product concept, same theme, separate pixel and domain</td><td>€360</td></tr>
+<tr><td>Email and SMS</td><td>Klaviyo (free to 250 contacts, then growth tiers)</td><td>Flows, back-in-stock, post-purchase survey</td><td>€0 – €150</td></tr>
+<tr><td>Server-side tracking</td><td>Stape (GTM server container)</td><td>Meta CAPI, Google Enhanced Conversions, consent-aware</td><td>€20</td></tr>
+<tr><td>Models</td><td>Claude Haiku 5.5 for extraction and triage; Sonnet 5.5 for planning and panels; Opus 5.5 only for incidents and verdict write-ups</td><td>Routed per task, with a per-agent monthly token budget enforced in the gateway</td><td>€150 – €400</td></tr>
+<tr><td>Observability</td><td>Grafana Cloud free tier + OpenTelemetry; Sentry free tier</td><td>Traces per agent run, cost per decision, error budget</td><td>€0 – €30</td></tr>
+<tr><td>Total platform</td><td colspan="2">Excluding advertising spend, inventory and payment fees</td><td><strong>≈ €600 – €1,100</strong></td></tr>
+</table></div>
+
+<div class="callout info"><span class="t">What is deliberately not here yet</span>
+<p>No Temporal Cloud, no Service Bus, no Fivetran, no Triple Whale, no Kubernetes, no data warehouse. Each of those is the right answer later, and <a href="scale.html">the scale plan</a> says at which phase and on what trigger. Buying them at ten products would add about €1,500 a month and a second person's worth of operational surface for capability nobody is using yet. The architecture earns the right to them by hitting a stated threshold: Postgres queue depth sustained over 5,000 jobs, or a saga that needs a timer longer than 24 hours, or a third engineer joining.</p></div>
+
+<h2 id="bus">The bus, concretely</h2>
+<p>A bus here means one thing: work is <strong>handed over as a durable row, not as a function call</strong>. If the process dies mid-decision, the work is still there, exactly once, and the next worker picks it up. That property is what lets ten storefronts run unattended overnight.</p>
+
+<div class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  subgraph In["Ingress (adapters, idempotent)"]
+    direction TB
+    i1["Shopify webhooks<br/>orders · refunds · inventory"]; i2["Ad platform pollers<br/>Meta · Google · TikTok"]; i3["Supplier email / portal"]; i4["Cron ticks<br/>snapshot · daily · weekly"]
+  end
+  OB["outbox<br/>(same txn as the write)"]
+  Q["work_queue<br/>Postgres · SKIP LOCKED<br/>topic · key · attempt · run_after"]
+  subgraph W["Workers (N=4 on one VM)"]
+    direction TB
+    w1["agent runner<br/>harness stages 1-7"]; w2["deterministic engines<br/>reorder qty · allocator · funnel stats"]
+  end
+  GW["Action Gateway<br/>schema → policy (OPA) → tier → idempotent execute"]
+  LG[("ops_ledger<br/>facts · decisions · actions · evidence")]
+  DLQ["dead_letter<br/>+ console triage"]
+  In --> OB --> Q --> W
+  W -->|"propose_action"| GW
+  GW --> LG
+  GW -->|"emits events"| OB
+  W -->|"5 attempts, expo backoff"| DLQ
+  LG -. "read models" .-> W
+</script>
+</div>
+<p class="caption">Figure D0.1: Phase-1 bus. The outbox pattern means an event is never published unless the database write committed, and never lost if it did.</p>
+
+<h3>The five rules that make a Postgres queue safe</h3>
+<div class="table-wrap"><table>
+<tr><th>Rule</th><th>Mechanism</th><th>What it prevents</th></tr>
+<tr><td>Exactly-once effect</td><td>Every action carries an <code>idempotency_key</code> = hash(agent, intent, business keys, period). The gateway stores it unique; a replay returns the first result</td><td>Two purchase orders for the same need, two budget changes from one retry</td></tr>
+<tr><td>Ordering where it matters</td><td><code>session_key</code> on the job row (usually <code>sku</code> or <code>campaign_id</code>); a worker holds an advisory lock on that key for the run</td><td>Two workers reordering the same SKU concurrently</td></tr>
+<tr><td>No lost events</td><td>Transactional outbox: the fact and its event commit together, a relay moves them to the queue</td><td>"We wrote the order but never re-forecast"</td></tr>
+<tr><td>Bounded retries</td><td>5 attempts, exponential backoff with jitter, then dead letter with the full trace</td><td>A poison message burning tokens all night</td></tr>
+<tr><td>Fair scheduling</td><td>Per-topic concurrency caps and a per-agent token budget checked before the model call</td><td>A marketing backfill starving the order pipeline, and a runaway bill</td></tr>
+</table></div>
+
+<p>The swap path is explicit. Agent code only ever sees <code>bus.publish(topic, key, payload)</code> and <code>bus.subscribe(topic, handler)</code>. Phase 2 replaces the driver with Azure Service Bus sessions; anything with a timer longer than a day, or a multi-step commit that must unwind, moves to a Temporal workflow. Nothing in the agents changes.</p>
+
+<h3>Topics in use</h3>
+<div class="table-wrap"><table>
+<tr><th>Topic</th><th>Published by</th><th>Consumed by</th><th>Rough volume, 10 products</th></tr>
+<tr><td><code>order.placed</code> / <code>order.refunded</code></td><td>Shopify adapter</td><td>Demand sensing, verdict, finance</td><td>50 – 2,000 / day</td></tr>
+<tr><td><code>inventory.snapshot.taken</code></td><td>Cron, hourly</td><td>Reorder agent (availability history)</td><td>24 × SKUs / day</td></tr>
+<tr><td><code>ad.metrics.pulled</code></td><td>Platform pollers, hourly</td><td>Marketing allocator, verdict</td><td>240 / day</td></tr>
+<tr><td><code>budget.reallocated</code></td><td>Action Gateway</td><td>Finance, console, verdict</td><td>10 – 40 / day</td></tr>
+<tr><td><code>po.proposed</code> / <code>po.created</code></td><td>Reorder agent / gateway</td><td>Supplier liaison, finance</td><td>5 – 30 / week</td></tr>
+<tr><td><code>verdict.published</code></td><td>Verdict agent, weekly</td><td>Marketing, reorder, humans</td><td>10 / week</td></tr>
+<tr><td><code>anomaly.raised</code></td><td>Any agent, any guard</td><td>Control tower, on-call</td><td>0 – 20 / day</td></tr>
+</table></div>
+
+<h2 id="harness">The harness contract: one file per agent</h2>
+<p>The harness is everything around the model that makes it useful and safe: what it is allowed to read, what it may propose, how many steps it gets, what counts as evidence, what happens when it is wrong. <a href="harness.html">The seven stages</a> describe the loop. What follows is the artefact that configures it — and the direct answer to <em>"is it really the same agent for groceries and sunglasses?"</em></p>
+
+<pre>agent: reorder
+version: 7
+model:
+  plan:   claude-sonnet-5-5      # chooses among options, writes rationale
+  extract: claude-haiku-5-5      # supplier emails, confirmations
+  max_steps: 12
+  token_budget_month: 1_200_000  # enforced by the gateway, not by trust
+
+reads:                            # MCP read tools; each returns evidence ids
+  - sales_panel(sku, from, to)           # units, price, discount, availability%
+  - availability_history(sku, from, to)
+  - lost_demand_signals(sku, from, to)   # OOS sessions, back-in-stock, searches
+  - returns_by_variant(sku, window)
+  - supplier_terms(supplier_id)          # MOQ, case pack, lead-time distribution
+  - open_orders(sku)
+  - cash_position()
+
+writes:                           # the ONLY side effects; typed, tiered
+  - propose_reorder{sku, qty, need_by, supplier_id, rationale, evidence[]}
+  - propose_markdown{sku, pct, floor_reason}
+  - raise_anomaly{kind, severity, note}
+
+engines:                          # deterministic; the model may not do this arithmetic
+  demand: censored_poisson_v3     # reconstructs demand from availability
+  quantity: newsvendor_quantile   # service level -> order-up-to -> MOQ rounding
+
+policy:                           # <-- the entire difference between businesses
+  review_period_days: 7
+  shelf_life_days: null           # 3 for fresh bread, 14 for dairy, null = durable
+  service_level_by_class: {A: 0.97, B: 0.93, C: 0.85}
+  cover_cap_weeks: 16             # overbuy guard
+  min_history_days: 28            # below this: propose a test buy, never a bulk buy
+  markdown_curve: none            # linear_from_day_60 for perishables
+  trigger: [schedule, stockout_risk_below_days(10), verdict_published]
+  autonomy:
+    auto_execute_below_eur: 2_000
+    maker_checker_below_eur: 10_000
+    human_signal_above_eur: 10_000
+    daily_cap_eur: 15_000
+
+verify:                           # stage 5; failing any one blocks the write
+  - qty_within(0.4, 2.5, of: last_12w_sales)   # sanity band
+  - cover_after_order_lte: 16w
+  - every_number_cited_has_evidence_id
+  - cash_after_order_gte: 12w_runway
+</pre>
+
+<p>A supermarket replenishing yoghurt sets <code>shelf_life_days: 14</code>, <code>markdown_curve: linear_from_day_7</code>, <code>review_period_days: 1</code>. A sunglasses brand sets <code>shelf_life_days: null</code> and a weekly review. Same loop, same engines, same gateway, same audit trail. What is <em>not</em> configurable is the part that makes it trustworthy: evidence ids on every number, the deterministic quantity engine, and the tier ladder.</p>
+
+<div class="decision"><span class="t">Why the model is kept away from the arithmetic</span>
+<dl>
+<dt>Decision</dt><dd>Language models choose <em>between</em> options and explain them. A deterministic engine computes <em>how much</em>.</dd>
+<dt>Reason</dt><dd>A reorder quantity must be reproducible, testable against history, and defensible to a supplier. A sampled token stream is none of those.</dd>
+<dt>Consequence</dt><dd>Forecast quality becomes a measurable engineering problem (backtest error) rather than a prompt-tuning exercise, and the same engine is reused by the pricing and verdict agents.</dd>
+</dl></div>
+
+<h2 id="rules">Interaction rules R1–R12</h2>
+<p>These are the rules that stop twelve autonomous processes becoming an argument. They are enforced in code, not in prompts.</p>
+
+<div class="table-wrap"><table>
+<tr><th>#</th><th>Rule</th><th>Enforced by</th></tr>
+<tr><td>R1</td><td>No agent calls another agent. They publish facts and subscribe to topics.</td><td>No agent-to-agent HTTP route exists; the harness has no such tool</td></tr>
+<tr><td>R2</td><td>Exactly one agent owns each write. Pricing owns price, reorder owns quantity, marketing owns budget.</td><td>Gateway policy maps <code>intent → allowed agent</code>; anything else is rejected and logged</td></tr>
+<tr><td>R3</td><td>Every number in a rationale carries an evidence id pointing at a stored query result.</td><td>Verification stage rejects uncited numerals</td></tr>
+<tr><td>R4</td><td>Actions are tiered by money and reversibility, not by confidence.</td><td>Tier ladder in the gateway; the agent cannot choose its own tier</td></tr>
+<tr><td>R5</td><td>Spend and stock cover are coupled. No acquisition budget on a SKU with under two weeks of cover.</td><td>Deterministic coupling table (see <a href="flows.html">flows</a>), evaluated before every budget write</td></tr>
+<tr><td>R6</td><td>Changes have a cooldown. A lever moved today is frozen for its cooldown window.</td><td><code>last_changed_at</code> per lever, checked in the gateway</td></tr>
+<tr><td>R7</td><td>A decision with less than the configured minimum exposure is "not yet known", never "bad".</td><td>Minimum-exposure gate in every verdict and pause rule</td></tr>
+<tr><td>R8</td><td>Promotions, campaigns and price changes are published as plans <em>before</em> they run, and become forecast features.</td><td>Forecast feature store reads the plan table; holdouts preserved</td></tr>
+<tr><td>R9</td><td>Anything irreversible outside the company — money leaving, supplier bank details, a domain released, a customer email blast — is never fully autonomous.</td><td>Hard-coded T3 list, independent of tiers</td></tr>
+<tr><td>R10</td><td>Each agent has a monthly token and action budget. Exhaustion degrades to rules-only mode, it does not stop the business.</td><td>Gateway counters; fallback policies per agent</td></tr>
+<tr><td>R11</td><td>Every autonomous decision is reversible within one command for 7 days (reverse entry, not deletion).</td><td>Append-only ledger + compensation handlers per intent</td></tr>
+<tr><td>R12</td><td>If two agents' proposals conflict, the one improving contribution margin per euro of working capital wins; ties go to the human queue.</td><td>Arbitration function in the control tower, logged with both proposals</td></tr>
+</table></div>
+
+<h2 id="third">Third-party selections, with prices and exit costs</h2>
+<p>Selection rule in one sentence: <strong>buy systems of record and regulated integrations, build the decision layer, and rent nothing that would take more than a week to replace.</strong></p>
+
+<div class="table-wrap"><table>
+<tr><th>Need</th><th>Chosen</th><th>Monthly</th><th>Why this one</th><th>Rejected</th><th>Exit cost</th></tr>
+<tr><td>Storefront, checkout, payments, tax</td><td><span class="tag buy">Buy</span> Shopify Basic + Shopify Payments</td><td>€39 / store</td><td>PCI, tax, fraud, 3DS and a checkout that converts are not a differentiator. Admin API and webhooks are good enough to treat it as the system of record for orders.</td><td>Headless Medusa / custom (weeks of work, worse checkout), WooCommerce (ops burden)</td><td>Low: orders, products and customers export cleanly; our ledger already holds a normalised copy</td></tr>
+<tr><td>Paid acquisition</td><td><span class="tag buy">Buy</span> Meta Marketing API + Google Ads API; TikTok added only if the audience justifies it</td><td>API free; spend separate</td><td>Where women 25–45 actually are, and both APIs expose budgets, audiences and hourly stats programmatically</td><td>Third-party bid-management SaaS (expensive, opaque, and the rules are the valuable part)</td><td>None — the allocator logic is ours</td></tr>
+<tr><td>Ad data into our database</td><td><span class="tag build">Build</span> thin pollers; <span class="tag buy">Buy</span> Windsor.ai only if a fourth platform appears</td><td>€0 / €80</td><td>Three platform APIs with stable schemas is two days of code. Paying per connector to own less of our own data is a bad trade at this size.</td><td>Fivetran (price per MAR), Airbyte Cloud (overkill for 3 sources)</td><td>n/a</td></tr>
+<tr><td>Conversion signal quality</td><td><span class="tag buy">Buy</span> Stape server-side GTM + Meta CAPI + Google Enhanced Conversions</td><td>€20</td><td>The largest single lever on ad performance is signal quality, not bidding cleverness. Server-side also survives browser and consent changes.</td><td>Browser pixels only (lossy), self-hosted GTM server (we would be on call for it)</td><td>Low</td></tr>
+<tr><td>Measurement truth</td><td><span class="tag build">Build</span> Shopify-sourced contribution margin + Klaviyo post-purchase survey ("how did you hear about us?") + geo holdouts</td><td>€0</td><td>Platform-reported ROAS double-counts. A margin-based blended number plus a 10% geo holdout is both cheaper and more honest than attribution SaaS.</td><td>Triple Whale / Northbeam (€250–€1,500; revisit at €150k monthly spend), MMM tooling (needs 18 months of history)</td><td>n/a</td></tr>
+<tr><td>Email, SMS, back-in-stock</td><td><span class="tag buy">Buy</span> Klaviyo</td><td>€0 – €150</td><td>Owns the cheapest channel, and its back-in-stock and browse-abandon events are inputs the reorder and verdict agents read</td><td>Customer.io, Brevo (cheaper, weaker Shopify objects)</td><td>Medium: flows are rebuildable, contact history exports</td></tr>
+<tr><td>Fulfilment</td><td><span class="tag buy">Buy</span> 3PL with an API (Huboo / ShipBob class)</td><td>Per order</td><td>Warehousing is capital and labour we do not want. API gives inbound ASN, stock-on-hand and despatch events.</td><td>Self-fulfilment (does not survive a winner), Amazon MCF (channel conflict)</td><td>High — this is the stickiest choice, so stock accuracy and receipt timestamps are mirrored into our ledger daily</td></tr>
+<tr><td>Supplier exchange</td><td><span class="tag build">Build</span> email + PDF + portal adapters; <span class="tag buy">Buy</span> EDI (Orderful class) only when a supplier mandates it</td><td>€0 → €400</td><td>Small suppliers do not do EDI. Paying for it before anyone asks is pure cost.</td><td>SPS Commerce upfront</td><td>n/a</td></tr>
+<tr><td>Accounting</td><td><span class="tag buy">Buy</span> Xero</td><td>€40</td><td>Auditable books, bank feeds, VAT. Our ledger posts journals to it; it never drives operations.</td><td>Spreadsheet (fails at the first audit), ERP (absurd at this stage)</td><td>Low</td></tr>
+<tr><td>Models and gateway</td><td><span class="tag buy">Buy</span> Claude via API, behind our own gateway</td><td>€150 – €400</td><td>Per-agent quotas, caching, fallback to a second vendor, and cost per decision attributed to the agent that spent it</td><td>Direct SDK calls from each agent (no quotas, no attribution, no failover)</td><td>Low — one adapter</td></tr>
+<tr><td>Durable workflow</td><td><span class="tag build">Build</span> Postgres queue now; <span class="tag buy">Buy</span> Temporal Cloud at phase 2</td><td>€0 → €200</td><td>Nothing in phase 1 needs multi-day timers or replay. The trigger to adopt is written down, so it is a decision rather than a drift.</td><td>Temporal now (€200/mo and a concept to teach for capability unused), Celery/Redis (weaker durability)</td><td>Low by design: one driver behind <code>bus.*</code></td></tr>
+<tr><td>Observability</td><td><span class="tag buy">Buy</span> Grafana Cloud free + Sentry free, OpenTelemetry everywhere</td><td>€0 – €30</td><td>Traces per agent run with cost and token counts attached. Vendor-neutral instrumentation.</td><td>Datadog (price), LLM-specific observability SaaS (we need business traces too)</td><td>Low</td></tr>
+</table></div>
+
+<h2 id="oss">The honest answer on open source</h2>
+<p>The concern raised in the brief was not ideological, it was about delivery risk: open source can mean more people, more integration work, and bugs owned by nobody. The rule that resolves it:</p>
+<div class="table-wrap"><table>
+<tr><th>Category</th><th>Position</th><th>Examples here</th></tr>
+<tr><td>Libraries inside our process</td><td><strong>Use freely.</strong> No operational surface, replaceable in an afternoon</td><td>Postgres drivers, Zod/Pydantic schemas, LightGBM, statsforecast, OPA as a library, OpenTelemetry SDKs</td></tr>
+<tr><td>Infrastructure we would have to operate</td><td><strong>Avoid at this size.</strong> An on-call rota of five people cannot also run a broker and a warehouse</td><td>Self-hosted Kafka, self-hosted Temporal, self-managed Postgres, Airflow</td></tr>
+<tr><td>Agent frameworks</td><td><strong>Borrow the ideas, keep the harness thin and ours.</strong> The valuable part is validation, tiering and evidence, which no framework will enforce the way the business needs</td><td>LangGraph and Agent Framework patterns are referenced; neither is a dependency on the critical path</td></tr>
+<tr><td>Anything touching money, tax or customer payment data</td><td><strong>Buy.</strong> Liability transfer is the point</td><td>Shopify Payments, Stripe, Xero</td></tr>
+</table></div>
+
+<h2 id="team">Who runs it: five or six people</h2>
+<div class="table-wrap"><table>
+<tr><th>Role</th><th>Owns</th><th>Week in the life</th></tr>
+<tr><td>Platform engineer (me, initially)</td><td>Harness, gateway, bus, adapters, policy file</td><td>Ships adapters and rules; triages the dead-letter queue; keeps cost per decision falling</td></tr>
+<tr><td>Second engineer (the honest ask)</td><td>Operate and extend: on-call rota, data pipelines, the console</td><td>Needed from the first winner, not before. One person cannot be both the only builder and the only pager.</td></tr>
+<tr><td>Merchandiser / buyer</td><td>Product selection, supplier relationships, T3 approvals</td><td>Reviews the weekly verdict, signs the purchase orders above the autonomy line</td></tr>
+<tr><td>Growth owner</td><td>Creative supply, offer and positioning</td><td>Feeds the allocator new creative; the allocator decides the money</td></tr>
+<tr><td>Customer care</td><td>Exceptions the agents escalate</td><td>Handles the 5–10% of tickets the care agent will not touch autonomously</td></tr>
+<tr><td>Finance, part-time</td><td>Cash, open-to-buy, reconciliation review</td><td>Sets the budget envelopes the agents must respect</td></tr>
+</table></div>
+<div class="callout warn"><span class="t">Said plainly</span>
+<p>Everything in phase 1 can be built by one engineer, and I would rather state the ceiling than discover it: the moment two storefronts are winners with real volume, there must be a second engineer whose job is to keep it running while the first keeps building. Scaling without that is how a working system becomes an outage with no owner.</p></div>
+
+<h2 id="order">Build order: what exists when</h2>
+<div class="timeline">
+<div class="tl-item"><div class="tl-time">Days 1–5</div><h4>The spine</h4><p>Postgres schema (ledger, outbox, queue, snapshots), Shopify adapter with idempotent webhooks, the hourly inventory snapshot job, the action gateway with the policy file and tier ladder, OpenTelemetry traces. Nothing intelligent yet, and it is the part everything else depends on. <strong>The snapshot job is first because missing availability history is unrecoverable</strong> — the towel case on the next page is exactly that failure.</p></div>
+<div class="tl-item"><div class="tl-time">Days 6–10</div><h4>Agent one: marketing allocation</h4><p>Ad pollers, server-side conversions, the margin-based metric definitions, pacing guards hourly, the daily pause/scale rules, the weekly channel bandit. First week runs in shadow mode: it proposes, a human approves, and we compare.</p></div>
+<div class="tl-item"><div class="tl-time">Days 11–16</div><h4>Agent two: reorder</h4><p>Censored-demand engine with backtests against the existing sales history, the newsvendor quantity engine, supplier terms, purchase-order proposals under maker-checker. Backtest first: if it cannot beat the current reorder decisions on last year's data, it does not go live.</p></div>
+<div class="tl-item"><div class="tl-time">Days 17–21</div><h4>Agent three: product verdict</h4><p>Funnel decomposition, the product-versus-site discriminator, the fixed experiment budget, verdict publication and the kill runbook. This is the one that turns ten launches into a portfolio instead of ten hopes.</p></div>
+<div class="tl-item"><div class="tl-time">Week 4 onward</div><h4>Earn each upgrade</h4><p>Autonomy rises only where the evaluation set says it should: an agent moves from shadow to auto-execute when it matches or beats human decisions on a 30-decision backtest and has a clean week of guard trips. Every threshold in the config files is version-controlled, so a change of behaviour is a reviewable diff.</p></div>
+</div>
+
+<div class="callout info"><span class="t">Where to read next</span>
+<p><a href="agent-marketing.html">D1 — the marketing allocation agent</a>: how a defined audience becomes targeting, and how budget moves to what worked. <a href="agent-reorder.html">D2 — the reorder agent</a>: the white and black towel case, solved with numbers. <a href="agent-verdict.html">D3 — the verdict agent</a>: product or site, keep or kill.</p></div>
+
+</div></main>
+</body>
+</html>

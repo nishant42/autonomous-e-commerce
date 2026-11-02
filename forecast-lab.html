@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Forecast Lab</title>
+<meta name="description" content="Interactive forecasting pipeline: segmentation, model portfolio, backtest, reconciliation, calibration and purchase decision.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js"></script>
+<style>
+  .lab { max-width: 1380px; margin: 0 auto; padding: 16px 20px 70px; display: grid; gap: 16px; }
+  .lab-head { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .lab-head h1 { font-size: 26px; margin: 0; }
+  .lab-head p { margin: 2px 0 0; color: var(--fg-muted); font-size: 13.5px; max-width: 70ch; }
+  .ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+  .seg { display: flex; gap: 3px; padding: 3px; border-radius: 11px; background: var(--bg-sunk); border: 1px solid var(--border); flex-wrap: wrap; }
+  .seg button { height: 32px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: var(--fg-muted); font: inherit; font-size: 13px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--bg-elev); color: var(--fg); box-shadow: var(--shadow); }
+  .play { height: 40px; padding: 0 18px; border-radius: 11px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 600; font-size: 14.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .play svg { width: 15px; height: 15px; }
+
+  .stepper { position: sticky; top: calc(58px + env(safe-area-inset-top, 0px)); z-index: 10; display: flex; gap: 6px; overflow-x: auto; padding: 8px; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 14px; }
+  .stepper button { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--fg-muted); font: inherit; font-size: 12.5px; cursor: pointer; transition: all .2s; }
+  .stepper button b { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); }
+  .stepper button.done { color: var(--fg); }
+  .stepper button.done b { color: var(--ok); }
+  .stepper button.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .stepper button.on b { color: var(--accent-fg); }
+  .narr { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-radius: 12px; background: var(--bg-elev); border: 1px solid var(--border); font-size: 14.5px; }
+  .narr .k { font-family: var(--mono); font-size: 11px;  color: var(--flax); white-space: nowrap; }
+
+  .stages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .st { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; box-shadow: var(--shadow); min-width: 0; transition: border-color .3s, box-shadow .3s, transform .3s; scroll-margin-top: 130px; }
+  .st.wide { grid-column: 1 / -1; }
+  .st.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-lift); }
+  .st-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .st-h .n { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 600; }
+  .st-h h3 { margin: 0; font-size: 18px; }
+  .st-h .who { margin-left: auto; font-size: 11.5px; }
+  .st p.d { color: var(--fg-muted); font-size: 13.5px; margin: 0 0 10px; }
+  .algo { margin-top: 10px; font-size: 12px; color: var(--fg-faint); border-top: 1px dashed var(--border); padding-top: 8px; }
+  .algo code { font-size: 11px; }
+  canvas { width: 100%; display: block; }
+  .c-220 { height: 220px; } .c-260 { height: 260px; } .c-200 { height: 200px; } .c-180 { height: 180px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0; font-size: 13px; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+  .switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .note { font-size: 12.5px; color: var(--fg-muted); background: var(--bg-sunk); border-radius: 9px; padding: 8px 10px; }
+  .note b { color: var(--fg); }
+  .delta { font-family: var(--mono); font-weight: 600; }
+  .delta.up { color: var(--ok); } .delta.down { color: var(--danger); }
+
+  .train { display: grid; gap: 8px; }
+  .tr { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 12.5px; }
+  .tr .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tr .nm small { display: block; font-weight: 400; color: var(--fg-faint); font-size: 11px; }
+  .models { display: flex; flex-wrap: wrap; gap: 5px; }
+  .mc { position: relative; overflow: hidden; font-family: var(--mono); font-size: 10.5px; padding: 3px 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg-sunk); color: var(--fg-muted); }
+  .mc i { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); transition: width .8s ease-out; }
+  .mc.fit i { width: 100%; }
+  .mc.win { background: var(--ok-soft); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); font-weight: 600; }
+  .mc.skip { opacity: .45; text-decoration: line-through; }
+
+  .lb { width: 100%; font-size: 12.5px; }
+  .lb td, .lb th { padding: 7px 10px; }
+  .lb tr.win td { background: var(--ok-soft); }
+  .lb .bar { display: inline-block; height: 6px; border-radius: 99px; background: var(--accent); vertical-align: middle; margin-right: 6px; transition: width .6s; }
+  .gate { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
+  .gate.pass { background: var(--ok-soft); color: var(--ok); } .gate.fail { background: var(--danger-soft); color: var(--danger); }
+
+  .kv { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
+  .kv div { background: var(--bg-sunk); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+  .kv b { display: block; font-family: var(--display); font-size: 19px; font-variant-numeric: tabular-nums; }
+  .kv span { font-size: 11px; color: var(--fg-faint); }
+  .sl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 16px; margin: 6px 0 10px; }
+  .sl label { font-size: 12px; color: var(--fg-muted); display: grid; gap: 3px; }
+  .sl label b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .sl input[type=range] { width: 100%; accent-color: var(--accent); }
+  .tierp { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
+  .tierp.T0, .tierp.T1 { background: var(--ok-soft); color: var(--ok); } .tierp.T2 { background: var(--warn-soft); color: var(--warn); } .tierp.T3 { background: var(--danger-soft); color: var(--danger); }
+  .chain { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chain span { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: var(--bg-sunk); color: var(--fg-faint); border: 1px solid var(--border); transition: all .3s; }
+  .chain span.lit { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+  .chain span.alarm { background: var(--danger-soft); color: var(--danger); }
+  .legend-s { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--fg-muted); margin-top: 6px; }
+  .legend-s i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  @media (max-width: 1000px) { .stages { grid-template-columns: minmax(0, 1fr); } .sl, .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 600px) { .lab { padding: 12px 16px 50px; } .tr { grid-template-columns: minmax(0, 1fr); } .ctl { margin-left: 0; } }
+</style>
+</head>
+<body data-app>
+<main>
+<div class="lab">
+  <div class="lab-head">
+    <div>
+      <h1>Forecast Lab</h1>
+      <p>The forecasting pipeline from the design, running in your browser on sample sales data. Press Start for a guided run, or click any stage. Change the product, the service level or the stock-out correction and watch everything downstream recompute.</p>
+    </div>
+    <div class="ctl">
+      <div class="seg" id="skus" role="group" aria-label="Product"></div>
+      <button class="play" id="play" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg><span>Start</span></button>
+    </div>
+  </div>
+
+  <nav class="stepper" id="stepper" aria-label="Pipeline stages"></nav>
+  <div class="narr"><span class="k" id="n-k">Ready</span><span id="n-t">Nine stages: data → censoring fix → segmentation → training → backtest → reconciliation → calibration → forecast → purchase decision. Then try the spike detector and the newsvendor calculator below.</span></div>
+
+  <div class="stages">
+    <section class="st" id="s1">
+      <div class="st-h"><span class="n">01</span><h3>Sales history</h3><span class="who tag det">Lakehouse</span></div>
+      <p class="d">One year of daily units for the selected product. Shaded days were <b>out of stock</b>.</p>
+      <canvas id="c1" class="c-220"></canvas>
+      <div class="legend-s"><span><i style="background:var(--accent)"></i>units sold</span><span><i style="background:var(--danger-soft);border:1px solid var(--danger)"></i>stock-out</span><span><i style="background:var(--flax)"></i>28-day average</span></div>
+      <div class="algo">Sample data: Poisson demand with weekly and yearly seasonality, a January sale and stock-out windows. Illustrative only.</div>
+    </section>
+
+    <section class="st" id="s2">
+      <div class="st-h"><span class="n">02</span><h3>Censored-demand correction</h3><span class="who tag det">Feature pipeline</span></div>
+      <p class="d">Zero sales on a stock-out day doesn't mean zero demand. Masking those days stops the model from learning "nobody wanted it".</p>
+      <div class="row"><label class="switch" for="cens"><input id="cens" type="checkbox" checked> Correct for stock-outs</label></div>
+      <canvas id="c2" class="c-180"></canvas>
+      <div class="note" id="n2"></div>
+      <div class="algo">Days with &lt; 90% in-stock hours are masked from the level and seasonality estimates (masked loss), not treated as zero.</div>
+    </section>
+
+    <section class="st" id="s3">
+      <div class="st-h"><span class="n">03</span><h3>Segmentation · ADI / CV²</h3><span class="who tag ml">ML ops</span></div>
+      <p class="d">Each series is classified by how often it sells (ADI) and how variable the sizes are (CV²). The segment picks the model family.</p>
+      <canvas id="c3" class="c-260"></canvas>
+      <div class="algo">Syntetos-Boylan thresholds: ADI 1.32, CV² 0.49. Products with under 8 weeks of history go to cold start.</div>
+    </section>
+
+    <section class="st" id="s4">
+      <div class="st-h"><span class="n">04</span><h3>Train the model portfolio</h3><span class="who tag ml">Azure ML · nightly</span></div>
+      <p class="d">Every product gets baselines plus the model family for its segment. Winners are highlighted after the backtest.</p>
+      <div class="train" id="train"></div>
+      <div class="algo">In-browser stand-ins: the "LightGBM" model here is a feature-based quantile learner with the same inputs and outputs (level, day-of-week, lag-364 seasonality, empirical quantiles); production uses LightGBM with quantile loss. Croston-SBA, TSB, ETS and seasonal naive are implemented as specified.</div>
+    </section>
+
+    <section class="st wide" id="s5">
+      <div class="st-h"><span class="n">05</span><h3>Rolling-origin backtest and promotion gate</h3><span class="who tag rules">Gate</span></div>
+      <p class="d">Three origins × 28-day horizons on held-out data. The winner must beat the seasonal-naive baseline, or the baseline is published instead.</p>
+      <div class="table-wrap"><table class="lb" id="lb"></table></div>
+      <div class="row" id="gate"></div>
+      <div class="algo">Winner = lowest pinball loss within the segment's model family; it must also beat seasonal-naive. WAPE = Σ|y − ŷ| / Σy · bias = (Σŷ − Σy) / Σy · pinball averaged over P10/P50/P90 · coverage = share of actuals inside P10-P90.</div>
+    </section>
+
+    <section class="st" id="s6">
+      <div class="st-h"><span class="n">06</span><h3>Hierarchical reconciliation</h3><span class="who tag ml">MinT (OLS here)</span></div>
+      <p class="d">The collection total is forecast separately. Children and parent are reconciled so the numbers add up everywhere.</p>
+      <canvas id="c6" class="c-220"></canvas>
+      <div class="note" id="n6"></div>
+      <div class="algo">ỹ = S (SᵀS)⁻¹ Sᵀ ŷ for the Étoile collection (parent + 3 children), 28-day totals. Production uses MinT with a shrinkage covariance.</div>
+    </section>
+
+    <section class="st" id="s7">
+      <div class="st-h"><span class="n">07</span><h3>Conformal calibration</h3><span class="who tag ml">Calibration</span></div>
+      <p class="d">The P10-P90 band should contain about 80% of outcomes. The width is scaled on backtest residuals until it does.</p>
+      <canvas id="c7" class="c-180"></canvas>
+      <div class="note" id="n7"></div>
+      <div class="algo">Split-conformal on backtest windows: find the smallest scale k so that the interval P50 ± k·(spread) covers ≥ 80%.</div>
+    </section>
+
+    <section class="st wide" id="s8">
+      <div class="st-h"><span class="n">08</span><h3>Published forecast · 26 weeks</h3><span class="who tag ml">fcst-v18</span></div>
+      <p class="d">Last 8 weeks of actuals, then P10 / P50 / P90. This is what the planner, pricing, marketing and finance read.</p>
+      <canvas id="c8" class="c-260"></canvas>
+      <div class="legend-s"><span><i style="background:var(--fg-faint)"></i>actual</span><span><i style="background:var(--accent)"></i>P50</span><span><i style="background:var(--accent-soft);border:1px solid var(--accent)"></i>P10-P90 band</span></div>
+    </section>
+
+    <section class="st wide" id="s9">
+      <div class="st-h"><span class="n">09</span><h3>Purchase decision · Monte Carlo order-up-to</h3><span class="who tag llm">Planner → Procurement</span></div>
+      <p class="d">5,000 simulated futures of demand over (lead time + review period). The order-up-to level S is the service-level quantile. Policy then sets the approval tier.</p>
+      <div class="sl">
+        <label for="svc">Service level <b id="svc-v">97%</b><input id="svc" type="range" min="80" max="99" value="97"></label>
+        <label for="ltp">Lead time P90 (days) <b id="ltp-v">33</b><input id="ltp" type="range" min="25" max="60" value="33"></label>
+        <label for="oh">On hand <b id="oh-v">42</b><input id="oh" type="range" min="0" max="200" value="42"></label>
+        <label for="spk" class="switch" style="align-self:end"><input id="spk" type="checkbox"> Forecast is anomaly-influenced</label>
+      </div>
+      <div class="kv" id="kv9"></div>
+      <canvas id="c9" class="c-220"></canvas>
+      <div class="row" id="tier9"></div>
+      <div class="algo">Lead time ~ lognormal(P50 24 d, P90 slider). Daily demand ~ normal fitted to the forecast P50/P90, truncated at 0. Review period 7 days. Qty = S − (on hand + on order 60), rounded up to case pack 6, capped at 16 weeks of cover. Unit cost €28 for the towel. Tiers: T0 ≤ €5k · T1 ≤ €20k · T2 ≤ €60k · T3 above; anomaly-influenced → at least T2.</div>
+    </section>
+
+    <section class="st" id="s10">
+      <div class="st-h"><span class="n">+</span><h3>Demand sensing · CUSUM spike detector</h3><span class="who tag ml">intraday</span></div>
+      <p class="d">A live order stream. Press the button to make the towel sell 3× faster and watch the detector react.</p>
+      <div class="row"><button class="icon-btn" id="spike" type="button">▶ Stream orders with a 3× spike</button></div>
+      <canvas id="c10" class="c-200"></canvas>
+      <div class="chain" id="chain"><span>standardise residuals</span><span>CUSUM &gt; h</span><span>fraud check: real buyers</span><span>cause: external referral</span><span>re-forecast with decay prior</span><span>anomaly_influenced → PO tier T2</span></div>
+      <div class="algo">Sₜ = max(0, Sₜ₋₁ + zₜ − k), k = 0.5, alarm when Sₜ &gt; h = 5. zₜ = (units − P50) / σ.</div>
+    </section>
+
+    <section class="st" id="s11">
+      <div class="st-h"><span class="n">+</span><h3>Newsvendor · seasonal one-shot buy</h3><span class="who tag rules">Planner</span></div>
+      <p class="d">For a new-season duvet cover, unsold stock goes to the outlet. The best buy is a quantile of season demand.</p>
+      <div class="sl" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <label for="nvp">Price <b id="nvp-v">€249</b><input id="nvp" type="range" min="120" max="400" value="249"></label>
+        <label for="nvc">Cost <b id="nvc-v">€92</b><input id="nvc" type="range" min="40" max="200" value="92"></label>
+        <label for="nvs">Outlet value <b id="nvs-v">€60</b><input id="nvs" type="range" min="0" max="120" value="60"></label>
+      </div>
+      <canvas id="c11" class="c-200"></canvas>
+      <div class="note" id="n11"></div>
+      <div class="algo">Cu = price − cost, Co = cost − outlet value, critical ratio = Cu / (Cu + Co), Q* = F⁻¹(CR). Season demand ~ Normal(400, 120) from the analog forecast. Expected profit estimated from 4,000 simulated seasons.</div>
+    </section>
+  </div>
+  <p class="muted" style="font-size:12px;margin:0">All data is synthetic and every algorithm runs in your browser. Numbers are for explanation, not results.</p>
+</div>
+</main>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---------------- seeded data ----------------
+  function rng(seed) { return function () { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function poisson(l, r) { if (l <= 0) return 0; let L = Math.exp(-l), k = 0, p = 1; do { k++; p *= r(); } while (p > L); return k - 1; }
+  const N = 364, DOW = [0.85, 0.9, 0.95, 1, 1.1, 1.35, 1.25];
+  const yearly = (d) => 1 + 0.25 * Math.cos(((d - 330) / 365) * 2 * Math.PI) + (d >= 8 && d < 22 ? 0.5 : 0);
+  function make(seed, base, kind, stockouts) {
+    const r = rng(seed), y = [], out = [];
+    for (let d = 0; d < N; d++) {
+      const so = stockouts.some(([a, b]) => d >= a && d < b);
+      out.push(so);
+      let v = 0;
+      if (kind === "smooth") v = poisson(base * DOW[d % 7] * yearly(d), r);
+      if (kind === "intermittent") v = r() < 0.33 ? 1 + (r() < 0.2 ? 1 : 0) : 0;
+      if (kind === "lumpy") v = r() < 0.2 ? (r() < 0.5 ? 1 : 2 + Math.floor(r() * 7)) : 0;
+      if (kind === "new") v = d < N - 21 ? NaN : poisson(base * DOW[d % 7] * (1 + (d - (N - 21)) / 30), r);
+      y.push(so ? 0 : v);
+    }
+    return { y, out };
+  }
+  const SKUS = [
+    { id: "towel", name: "Étoile bath towel", sub: "smooth · A-class", ...make(11, 3, "smooth", [[150, 160], [N - 20, N - 11]]), cost: 28 },
+    { id: "hand", name: "Étoile hand towel", sub: "smooth", ...make(23, 4, "smooth", [[90, 96]]), cost: 14 },
+    { id: "sheet", name: "Étoile bath sheet", sub: "intermittent", ...make(37, 0, "intermittent", []), cost: 44 },
+    { id: "robe", name: "Waffle robe · XL", sub: "lumpy variant", ...make(41, 0, "lumpy", []), cost: 55 },
+    { id: "new", name: "Nuit duvet · sage (new)", sub: "3 weeks old", ...make(59, 1.2, "new", []), cost: 92 },
+  ];
+  let sel = SKUS[0], censor = true;
+
+  // ---------------- stats & models ----------------
+  const valid = (s, i) => !Number.isNaN(s.y[i]) && !(censor && s.out[i]);
+  function segment(s) {
+    const pts = []; let last = -1, gaps = [];
+    for (let i = 0; i < N; i++) { if (!valid(s, i) && !Number.isNaN(s.y[i]) && !s.out[i]) continue; if (Number.isNaN(s.y[i])) continue; if (s.y[i] > 0) { pts.push(s.y[i]); if (last >= 0) gaps.push(i - last); last = i; } }
+    const hist = s.y.filter((v) => !Number.isNaN(v)).length;
+    const adi = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 99;
+    const m = pts.reduce((a, b) => a + b, 0) / Math.max(1, pts.length), v = pts.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, pts.length);
+    const cv2 = m ? v / (m * m) : 0;
+    let seg = hist < 56 ? "cold start" : adi <= 1.32 ? (cv2 <= 0.49 ? "smooth" : "erratic") : cv2 <= 0.49 ? "intermittent" : "lumpy";
+    return { adi, cv2, seg, hist };
+  }
+  function dowFactors(s, end) {
+    const sum = Array(7).fill(0), cnt = Array(7).fill(0);
+    for (let i = Math.max(0, end - 84); i < end; i++) if (valid(s, i)) { sum[i % 7] += s.y[i]; cnt[i % 7]++; }
+    const avg = sum.map((v, i) => (cnt[i] ? v / cnt[i] : 0)), m = avg.reduce((a, b) => a + b, 0) / 7 || 1;
+    return avg.map((v) => (v ? v / m : 1));
+  }
+  function level(s, end, alpha) { let l = null; for (let i = Math.max(0, end - 120); i < end; i++) if (valid(s, i)) { const f = dowFactors(s, end)[i % 7] || 1; const x = s.y[i] / f; l = l === null ? x : alpha * x + (1 - alpha) * l; } return l || 0; }
+  function poisQ(m, q) { if (m <= 0) return 0; let k = 0, p = Math.exp(-m), c = p; while (c < q && k < 200) { k++; p *= m / k; c += p; } return k; }
+  const MODELS = {
+    snaive: { name: "Seasonal naive", fam: "baseline", fc(s, end, H) { const o = []; for (let h = 0; h < H; h++) { let v = null; for (let w = 1; w < 8 && v === null; w++) { const i = end - 7 * w + (h % 7); if (i >= 0 && valid(s, i)) v = s.y[i]; } o.push(v ?? 0); } return o.map((m) => [poisQ(m, 0.1), m, poisQ(m, 0.9)]); } },
+    ets: { name: "ETS", fam: "baseline", fc(s, end, H) { const l = level(s, end, 0.15), f = dowFactors(s, end); return Array.from({ length: H }, (_, h) => { const m = l * f[(end + h) % 7]; return [poisQ(m, 0.1), m, poisQ(m, 0.9)]; }); } },
+    gbm: { name: "LightGBM (quantile)", fam: "ml", fc(s, end, H) {
+      const l = level(s, end, 0.08), f = dowFactors(s, end);
+      const res = []; for (let i = Math.max(1, end - 84); i < end; i++) if (valid(s, i)) { const m = level(s, i, 0.08) * f[i % 7]; if (m > 0) res.push(s.y[i] / m); }
+      res.sort((a, b) => a - b);
+      const q = (p) => (res.length ? res[Math.floor(p * (res.length - 1))] : 1);
+      return Array.from({ length: H }, (_, h) => { const d = end + h, ly = d - 364 >= 0 ? yearly(d) / yearly(end - 1) : 1; const m = l * f[d % 7] * Math.max(0.6, Math.min(1.6, ly)); return [m * q(0.1), m * q(0.5) * 0.5 + m * 0.5, m * q(0.9)]; });
+    } },
+    croston: { name: "Croston-SBA", fam: "intermittent", fc(s, end, H) { let z = null, p = null, q = 1; for (let i = Math.max(0, end - 200); i < end; i++) { if (!valid(s, i)) continue; if (s.y[i] > 0) { z = z === null ? s.y[i] : 0.1 * s.y[i] + 0.9 * z; p = p === null ? q : 0.1 * q + 0.9 * p; q = 1; } else q++; } const m = z && p ? (1 - 0.05) * (z / p) : 0; return Array.from({ length: H }, () => [poisQ(m, 0.1), m, poisQ(m, 0.9)]); } },
+    tsb: { name: "TSB", fam: "intermittent", fc(s, end, H) { let z = null, pr = null; for (let i = Math.max(0, end - 200); i < end; i++) { if (!valid(s, i)) continue; const o = s.y[i] > 0 ? 1 : 0; pr = pr === null ? o : 0.08 * o + 0.92 * pr; if (o) z = z === null ? s.y[i] : 0.1 * s.y[i] + 0.9 * z; } const m = (pr || 0) * (z || 0); return Array.from({ length: H }, () => [poisQ(m, 0.1), m, poisQ(m, 0.9)]); } },
+    analog: { name: "Analog launch curve", fam: "cold", fc(s, end, H) { const obs = []; for (let i = end - 21; i < end; i++) if (valid(s, i)) obs.push(s.y[i]); const m0 = obs.reduce((a, b) => a + b, 0) / Math.max(1, obs.length); return Array.from({ length: H }, (_, h) => { const m = m0 * (1 + 0.35 * (1 - Math.exp(-h / 20))) * DOW[(end + h) % 7]; return [m * 0.45, m, m * 1.7]; }); } },
+  };
+  function candidates(seg) {
+    if (seg === "cold start") return ["analog", "snaive"];
+    if (seg === "intermittent" || seg === "lumpy") return ["croston", "tsb", "ets", "snaive"];
+    return ["gbm", "ets", "snaive"];
+  }
+  function backtest(s, key) {
+    let ae = 0, sy = 0, sf = 0, pb = 0, n = 0, cov = 0, rows = [];
+    for (const o of [N - 84, N - 56, N - 28]) {
+      const fc = MODELS[key].fc(s, o, 28);
+      for (let h = 0; h < 28; h++) {
+        const i = o + h; if (!valid(s, i)) continue;
+        const [p10, p50, p90] = fc[h], y = s.y[i];
+        ae += Math.abs(y - p50); sy += y; sf += p50; n++;
+        pb += [[0.1, p10], [0.5, p50], [0.9, p90]].reduce((a, [q, f]) => a + Math.max(q * (y - f), (q - 1) * (y - f)), 0) / 3;
+        if (y >= p10 && y <= p90) cov++;
+        rows.push({ y, p10, p50, p90 });
+      }
+    }
+    return { wape: sy ? ae / sy : NaN, bias: sy ? (sf - sy) / sy : NaN, pinball: n ? pb / n : NaN, cov: n ? cov / n : NaN, rows };
+  }
+  function evaluate(s) {
+    const seg = segment(s), cands = candidates(seg.seg);
+    if (seg.seg === "cold start") return { seg, cands, results: {}, winner: "analog", gate: { pass: true, why: "No history to backtest: analog forecast used, with wide intervals." } };
+    const results = {}; cands.forEach((k) => (results[k] = backtest(s, k)));
+    const eligible = cands.filter((k) => k !== "snaive");
+    let winner = eligible.reduce((b, k) => (results[k].pinball < results[b].pinball ? k : b), eligible[0]);
+    const pass = results[winner].pinball <= results.snaive.pinball + 1e-9;
+    const cand = winner;
+    if (!pass) winner = "snaive";
+    return { seg, cands, results, winner, gate: { pass, why: pass ? MODELS[winner].name + " has the lowest pinball loss for the " + seg.seg + " segment and beats the seasonal-naive baseline." : MODELS[cand].name + " did not beat seasonal-naive on pinball loss, so the baseline is published instead (the gate working as designed)." } };
+  }
+  function conformalK(rows) {
+    for (let k = 0.6; k <= 3.5; k += 0.05) {
+      let c = 0; rows.forEach((r) => { const lo = r.p50 - k * (r.p50 - r.p10), hi = r.p50 + k * (r.p90 - r.p50); if (r.y >= lo && r.y <= hi) c++; });
+      if (rows.length && c / rows.length >= 0.8) return { k, cov: c / rows.length };
+    }
+    return { k: 3.5, cov: 0.8 };
+  }
+
+  // ---------------- canvas helpers ----------------
+  function ctx(c) { const r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1; c.width = r.width * d; c.height = r.height * d; const x = c.getContext("2d"); x.scale(d, d); return { x, w: r.width, h: r.height }; }
+  function axes(x, w, h, pad, ymax, fmt) {
+    x.font = "10.5px " + css("--mono"); x.fillStyle = css("--fg-faint"); x.strokeStyle = css("--border"); x.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) { const y = pad.t + (h - pad.t - pad.b) * (1 - i / 4); x.beginPath(); x.moveTo(pad.l, y); x.lineTo(w - pad.r, y); x.stroke(); x.fillText(fmt ? fmt((ymax * i) / 4) : Math.round((ymax * i) / 4), 2, y + 3); }
+  }
+  const P = { t: 10, r: 10, b: 20, l: 30 };
+
+  // ---------------- stage renders (p = draw-in progress 0..1) ----------------
+  let E = null;
+  function recompute() { E = evaluate(sel); }
+  function draw1(p = 1) {
+    const { x, w, h } = ctx($("c1")), s = sel, n = N, ymax = Math.max(4, ...s.y.filter((v) => !Number.isNaN(v))) * 1.1;
+    axes(x, w, h, P, ymax);
+    const bw = (w - P.l - P.r) / n, Y = (v) => P.t + (h - P.t - P.b) * (1 - v / ymax), upto = Math.floor(n * p);
+    for (let i = 0; i < upto; i++) {
+      const X = P.l + i * bw;
+      if (s.out[i]) { x.fillStyle = css("--danger-soft"); x.fillRect(X, P.t, bw + 0.5, h - P.t - P.b); }
+      if (!Number.isNaN(s.y[i])) { x.fillStyle = css("--accent"); x.globalAlpha = 0.55; x.fillRect(X, Y(s.y[i]), Math.max(1, bw - 0.3), h - P.b - Y(s.y[i])); x.globalAlpha = 1; }
+    }
+    x.strokeStyle = css("--flax"); x.lineWidth = 2; x.beginPath(); let st = false;
+    for (let i = 28; i < upto; i++) { let a = 0, c = 0; for (let j = i - 28; j < i; j++) if (!Number.isNaN(s.y[j])) { a += s.y[j]; c++; } if (!c) continue; const X = P.l + i * bw, yy = Y(a / c); st ? x.lineTo(X, yy) : x.moveTo(X, yy); st = true; }
+    x.stroke();
+    x.fillStyle = css("--fg-faint"); ["Oct", "Jan", "Apr", "Jul", "Sep"].forEach((m, i) => x.fillText(m, P.l + (i / 4) * (w - P.l - P.r) - (i === 4 ? 18 : 0), h - 5));
+  }
+  function draw2(p = 1) {
+    const { x, w, h } = ctx($("c2")), s = sel, from = N - 56, ymax = Math.max(4, ...s.y.slice(from).filter((v) => !Number.isNaN(v))) * 1.3;
+    axes(x, w, h, P, ymax);
+    const bw = (w - P.l - P.r) / 56, Y = (v) => P.t + (h - P.t - P.b) * (1 - v / ymax);
+    for (let i = from; i < from + 56 * p; i++) {
+      const X = P.l + (i - from) * bw;
+      if (s.out[i]) { x.fillStyle = censor ? css("--bg-sunk") : css("--danger-soft"); x.fillRect(X, P.t, bw, h - P.t - P.b); if (censor) { x.fillStyle = css("--fg-faint"); x.font = "9px " + css("--mono"); x.fillText("masked", X + 1, P.t + 10 + ((i % 3) * 10)); } }
+      if (!Number.isNaN(s.y[i]) && !(censor && s.out[i])) { x.fillStyle = css("--accent"); x.globalAlpha = 0.6; x.fillRect(X + 1, Y(s.y[i]), bw - 2, h - P.b - Y(s.y[i])); x.globalAlpha = 1; }
+    }
+    const lvl = (c) => { const old = censor; censor = c; const l = level(s, N, 0.08); censor = old; return l; };
+    const a = lvl(false), b = lvl(true);
+    [[a, css("--danger"), "uncorrected"], [b, css("--ok"), "corrected"]].forEach(([v, col, t]) => { x.strokeStyle = col; x.setLineDash([5, 4]); x.beginPath(); x.moveTo(P.l, Y(v)); x.lineTo(w - P.r, Y(v)); x.stroke(); x.setLineDash([]); x.fillStyle = col; x.font = "600 10.5px " + css("--mono"); x.fillText(t + " " + v.toFixed(2) + "/day", w - P.r - 150, Y(v) - 4); });
+    const hasOut = s.out.slice(from).some(Boolean);
+    $("n2").innerHTML = hasOut ? "Demand level: <b>" + a.toFixed(2) + "/day</b> if stock-out days count as zero, <b>" + b.toFixed(2) + "/day</b> when they're masked (<span class='delta up'>+" + (((b - a) / (a || 1)) * 100).toFixed(0) + "%</span>). Without the fix, the next PO would be too small, and the product would sell out again." : "No stock-outs in the last 8 weeks for this product, so the correction changes nothing here. Try the <b>Étoile bath towel</b>.";
+  }
+  function draw3(p = 1) {
+    const { x, w, h } = ctx($("c3")), pad = { t: 14, r: 14, b: 30, l: 40 };
+    const X = (a) => pad.l + (Math.min(Math.log(a), Math.log(8)) / Math.log(8)) * (w - pad.l - pad.r), Y = (c) => pad.t + (h - pad.t - pad.b) * (1 - Math.min(c, 2) / 2);
+    x.fillStyle = css("--bg-sunk"); x.fillRect(pad.l, pad.t, w - pad.l - pad.r, h - pad.t - pad.b);
+    x.strokeStyle = css("--border-strong"); x.setLineDash([4, 4]);
+    x.beginPath(); x.moveTo(X(1.32), pad.t); x.lineTo(X(1.32), h - pad.b); x.moveTo(pad.l, Y(0.49)); x.lineTo(w - pad.r, Y(0.49)); x.stroke(); x.setLineDash([]);
+    x.font = "600 10.5px " + css("--mono"); x.fillStyle = css("--fg-faint");
+    x.fillText("SMOOTH", pad.l + 6, h - pad.b - 6); x.fillText("ERRATIC", pad.l + 6, pad.t + 14); x.fillText("INTERMITTENT", X(1.32) + 6, h - pad.b - 6); x.fillText("LUMPY", X(1.32) + 6, pad.t + 14);
+    x.font = "10.5px " + css("--mono"); x.fillText("ADI (log) →", w - pad.r - 76, h - 8); x.fillText("CV²", 6, pad.t + 8);
+    [1, 1.32, 2, 4, 8].forEach((a) => x.fillText(a, X(a) - 6, h - pad.b + 13));
+    SKUS.forEach((s, i) => {
+      if (i / SKUS.length > p) return;
+      const g = segment(s); if (g.seg === "cold start") { x.fillStyle = css("--flax"); x.font = "600 11px " + css("--font"); x.fillText("◆ " + s.name + " → cold start", pad.l + 8, pad.t + 32 + 0); return; }
+      const px = X(Math.max(1, g.adi)), py = Y(g.cv2), on = s === sel;
+      x.beginPath(); x.arc(px, py, on ? 8 : 6, 0, 7); x.fillStyle = on ? css("--accent") : css("--fg-faint"); x.fill();
+      x.font = (on ? "600 " : "") + "11.5px " + css("--font"); x.fillStyle = css("--fg"); x.fillText(s.name, Math.min(px + 10, w - pad.r - 120), py - 8);
+    });
+  }
+  function renderTrain(animate) {
+    const t = $("train");
+    t.innerHTML = SKUS.map((s) => { const ev = evaluate(s); return '<div class="tr"><span class="nm">' + s.name + "<small>" + ev.seg.seg + '</small></span><div class="models">' +
+      Object.keys(MODELS).map((k) => { const inC = ev.cands.includes(k); return '<span class="mc ' + (inC ? "" : "skip") + (inC && !animate ? " fit" : "") + (k === ev.winner && !animate ? " win" : "") + '" data-k="' + k + '" data-w="' + (k === ev.winner) + '">' + MODELS[k].name + "<i></i></span>"; }).join("") + "</div></div>"; }).join("");
+  }
+  async function animateTrain() {
+    renderTrain(true);
+    const chips = [...$("train").querySelectorAll(".mc:not(.skip)")];
+    for (const c of chips) { c.classList.add("fit"); await sleep(70); }
+    await sleep(500);
+    $("train").querySelectorAll('.mc[data-w="true"]').forEach((c) => c.classList.add("win"));
+  }
+  function renderLB() {
+    const ev = E;
+    if (ev.seg.seg === "cold start") { $("lb").innerHTML = "<tr><td>Only " + ev.seg.hist + " days of history: nothing to backtest yet. The analog launch-curve model is used, with intervals widened ×1.7, until 8 weeks of sales exist.</td></tr>"; $("gate").innerHTML = '<span class="gate pass">GATE · cold-start policy</span>'; return; }
+    const maxW = Math.max(...ev.cands.map((k) => ev.results[k].wape));
+    $("lb").innerHTML = "<tr><th>Model</th><th>Family</th><th>WAPE</th><th class='num'>Bias</th><th class='num'>Pinball</th><th class='num'>P10-P90 coverage</th><th></th></tr>" +
+      ev.cands.map((k) => { const r = ev.results[k]; return '<tr class="' + (k === ev.winner ? "win" : "") + '"><td><b>' + MODELS[k].name + "</b></td><td>" + MODELS[k].fam + '</td><td><span class="bar" style="width:' + Math.round((r.wape / maxW) * 90) + 'px"></span>' + (r.wape * 100).toFixed(1) + '%</td><td class="num">' + (r.bias >= 0 ? "+" : "") + (r.bias * 100).toFixed(1) + '%</td><td class="num">' + r.pinball.toFixed(3) + '</td><td class="num">' + (r.cov * 100).toFixed(0) + "%</td><td>" + (k === ev.winner ? '<span class="gate pass">winner</span>' : "") + "</td></tr>"; }).join("");
+    $("gate").innerHTML = '<span class="gate ' + (ev.gate.pass ? "pass" : "fail") + '">' + (ev.gate.pass ? "GATE PASSED" : "GATE FAILED") + "</span><span>" + ev.gate.why + "</span>";
+  }
+  function draw6(p = 1) {
+    const kids = SKUS.slice(0, 3), H = 28;
+    const base = kids.map((s) => { const ev = evaluate(s); return MODELS[ev.winner].fc(s, N, H).reduce((a, f) => a + f[1], 0); });
+    const agg = { y: Array.from({ length: N }, (_, i) => kids.reduce((a, s) => a + (Number.isNaN(s.y[i]) ? 0 : s.y[i]), 0)), out: Array(N).fill(false) };
+    const parent = MODELS.ets.fc(agg, N, H).reduce((a, f) => a + f[1], 0) * 1.08;
+    // OLS reconciliation: S = [[1,1,1],[1,0,0],[0,1,0],[0,0,1]], yhat = [parent, c1, c2, c3]
+    const yh = [parent, ...base], StY = [yh[0] + yh[1], yh[0] + yh[2], yh[0] + yh[3]];
+    const inv = [[0.75, -0.25, -0.25], [-0.25, 0.75, -0.25], [-0.25, -0.25, 0.75]]; // (SᵀS)⁻¹ for SᵀS = I + 11ᵀ
+    const b = inv.map((r) => r.reduce((a, v, j) => a + v * StY[j], 0));
+    const rec = [b[0] + b[1] + b[2], ...b];
+    const { x, w, h } = ctx($("c6")), labels = ["Collection", ...kids.map((k) => k.name.replace("Étoile ", ""))], ymax = Math.max(...yh, ...rec) * 1.15;
+    const pad = { t: 10, r: 10, b: 34, l: 38 }; axes(x, w, h, pad, ymax);
+    const gw = (w - pad.l - pad.r) / 4, Y = (v) => pad.t + (h - pad.t - pad.b) * (1 - (v * p) / ymax);
+    labels.forEach((l, i) => {
+      const gx = pad.l + i * gw + gw * 0.18, bw = gw * 0.3;
+      x.fillStyle = css("--fg-faint"); x.globalAlpha = 0.45; x.fillRect(gx, Y(yh[i]), bw, h - pad.b - Y(yh[i])); x.globalAlpha = 1;
+      x.fillStyle = css("--accent"); x.fillRect(gx + bw + 3, Y(rec[i]), bw, h - pad.b - Y(rec[i]));
+      x.fillStyle = css("--fg-muted"); x.font = "11px " + css("--font"); x.fillText(l, pad.l + i * gw + 4, h - 18);
+      x.font = "10px " + css("--mono"); x.fillText(Math.round(yh[i]) + " → " + Math.round(rec[i]), pad.l + i * gw + 4, h - 5);
+    });
+    const sumKids = base.reduce((a, v) => a + v, 0);
+    $("n6").innerHTML = "Before: children add to <b>" + Math.round(sumKids) + "</b> units but the collection forecast says <b>" + Math.round(parent) + "</b> (" + (((parent - sumKids) / sumKids) * 100).toFixed(0) + "% gap). After reconciliation, both read <b>" + Math.round(rec[0]) + "</b>. Grey bars = base forecasts, blue = reconciled (28-day totals).";
+  }
+  function draw7(p = 1) {
+    const { x, w, h } = ctx($("c7"));
+    if (E.seg.seg === "cold start") { x.fillStyle = css("--fg-muted"); x.font = "13px " + css("--font"); x.fillText("Cold start: no backtest residuals yet, fixed ×1.7 width.", 10, 30); $("n7").textContent = "Calibration starts once the product has 8 weeks of sales."; return; }
+    const rows = E.results[E.winner].rows, raw = E.results[E.winner].cov, cf = conformalK(rows);
+    E.k = cf.k;
+    const bars = [["raw model", raw, css("--warn")], ["calibrated", cf.cov, css("--ok")]];
+    const pad = 20, bh = 30;
+    bars.forEach(([l, v, col], i) => {
+      const y = 22 + i * (bh + 26), W = w - 150;
+      x.fillStyle = css("--bg-sunk"); x.fillRect(110, y, W, bh);
+      x.fillStyle = col; x.fillRect(110, y, W * v * p, bh);
+      x.strokeStyle = css("--fg"); x.setLineDash([3, 3]); x.beginPath(); x.moveTo(110 + W * 0.8, y - 6); x.lineTo(110 + W * 0.8, y + bh + 6); x.stroke(); x.setLineDash([]);
+      x.fillStyle = css("--fg"); x.font = "600 12px " + css("--font"); x.fillText(l, 8, y + 19);
+      x.font = "600 12px " + css("--mono"); x.fillText((v * 100 * p).toFixed(0) + "%", 116 + W * v * p, y + 19);
+    });
+    x.fillStyle = css("--fg-faint"); x.font = "10.5px " + css("--mono"); x.fillText("target 80%", 110 + (w - 150) * 0.8 - 30, 12);
+    $("n7").innerHTML = "The raw " + MODELS[E.winner].name + " interval covered <b>" + (raw * 100).toFixed(0) + "%</b> of actuals. Scaling its width by <b>k = " + cf.k.toFixed(2) + "</b> brings coverage to <b>" + (cf.cov * 100).toFixed(0) + "%</b>, so safety stock rests on an honest range.";
+  }
+  function forecastNow() {
+    const fc = MODELS[E.winner].fc(sel, N, 182), k = E.k || 1;
+    return fc.map(([a, m, b]) => [Math.max(0, m - k * (m - a)), m, m + k * (b - m)]);
+  }
+  function draw8(p = 1) {
+    const { x, w, h } = ctx($("c8")), hist = 56, fc = forecastNow(), T = hist + 182;
+    const ys = sel.y.slice(N - hist).map((v) => (Number.isNaN(v) ? 0 : v)), ymax = Math.max(4, ...ys, ...fc.map((f) => f[2])) * 1.1;
+    axes(x, w, h, P, ymax);
+    const X = (i) => P.l + (i / T) * (w - P.l - P.r), Y = (v) => P.t + (h - P.t - P.b) * (1 - v / ymax);
+    x.fillStyle = css("--fg-faint"); ys.forEach((v, i) => x.fillRect(X(i), Y(v), Math.max(1, (w - P.l - P.r) / T - 0.5), h - P.b - Y(v)));
+    const upto = Math.floor(182 * p);
+    if (upto > 1) {
+      x.beginPath(); for (let i = 0; i < upto; i++) x.lineTo(X(hist + i), Y(fc[i][2])); for (let i = upto - 1; i >= 0; i--) x.lineTo(X(hist + i), Y(fc[i][0])); x.closePath();
+      x.fillStyle = css("--accent-soft"); x.fill(); x.strokeStyle = css("--accent"); x.globalAlpha = 0.4; x.stroke(); x.globalAlpha = 1;
+      x.beginPath(); for (let i = 0; i < upto; i++) x.lineTo(X(hist + i), Y(fc[i][1])); x.strokeStyle = css("--accent"); x.lineWidth = 2; x.stroke(); x.lineWidth = 1;
+    }
+    x.strokeStyle = css("--flax"); x.setLineDash([4, 4]); x.beginPath(); x.moveTo(X(hist), P.t); x.lineTo(X(hist), h - P.b); x.stroke(); x.setLineDash([]);
+    x.fillStyle = css("--flax"); x.font = "600 10.5px " + css("--mono"); x.fillText("today · " + MODELS[E.winner].name, X(hist) + 6, P.t + 10);
+    x.fillStyle = css("--fg-faint"); x.font = "10.5px " + css("--mono"); ["−8w", "now", "+8w", "+16w", "+26w"].forEach((t, i) => x.fillText(t, X([0, hist, hist + 56, hist + 112, T - 4][i]) - 8, h - 5));
+  }
+
+  // Monte Carlo
+  function gauss(r) { let u = 0, v = 0; while (!u) u = r(); while (!v) v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  function draw9(p = 1) {
+    const svc = +$("svc").value / 100, ltp90 = +$("ltp").value, oh = +$("oh").value, spike = $("spk").checked, onord = 60, R = 7, cost = sel.cost;
+    $("svc-v").textContent = Math.round(svc * 100) + "%"; $("ltp-v").textContent = ltp90; $("oh-v").textContent = oh;
+    const fc = forecastNow().slice(0, 60), mu = fc.reduce((a, f) => a + f[1], 0) / fc.length * (spike ? 3 : 1), sd = Math.max(0.3, fc.reduce((a, f) => a + (f[2] - f[1]), 0) / fc.length / 1.2816) * (spike ? 2 : 1);
+    const muL = Math.log(24), sL = Math.max(0.05, Math.log(ltp90 / 24) / 1.2816), r = rng(7), draws = [];
+    for (let i = 0; i < 5000; i++) { const L = Math.exp(muL + sL * gauss(r)) + R; draws.push(Math.max(0, mu * L + sd * Math.sqrt(L) * gauss(r))); }
+    draws.sort((a, b) => a - b);
+    const S = draws[Math.floor(svc * 4999)], raw = Math.max(0, S - (oh + onord)), cap = Math.max(0, mu * 112 - (oh + onord));
+    let q = Math.ceil(Math.min(raw, cap) / 6) * 6;
+    const val = q * cost;
+    let tier = val <= 5000 ? "T0" : val <= 20000 ? "T1" : val <= 60000 ? "T2" : "T3";
+    if (spike && (tier === "T0" || tier === "T1")) tier = "T2";
+    $("kv9").innerHTML = '<div><b>' + mu.toFixed(1) + '</b><span>mean demand / day</span></div><div><b>' + Math.round(S) + '</b><span>order-up-to S (P' + Math.round(svc * 100) + ')</span></div><div><b>' + q + '</b><span>order qty (case pack 6)' + (raw > cap ? " · capped" : "") + '</span></div><div><b>€' + val.toLocaleString("en-GB") + '</b><span>PO value</span></div>';
+    const { x, w, h } = ctx($("c9")), bins = 40, lo = draws[0], hi = draws[4999], bw = (hi - lo) / bins || 1, cnt = Array(bins).fill(0);
+    draws.forEach((d) => cnt[Math.min(bins - 1, Math.floor((d - lo) / bw))]++);
+    const cm = Math.max(...cnt), pad = { t: 10, r: 10, b: 22, l: 10 }, X = (v) => pad.l + ((v - lo) / (hi - lo || 1)) * (w - pad.l - pad.r), gw = (w - pad.l - pad.r) / bins;
+    cnt.forEach((c, i) => { const v = lo + i * bw, hh = (c / cm) * (h - pad.t - pad.b) * p; x.fillStyle = v + bw <= S ? css("--accent") : css("--fg-faint"); x.globalAlpha = v + bw <= S ? 0.75 : 0.35; x.fillRect(pad.l + i * gw + 1, h - pad.b - hh, gw - 2, hh); });
+    x.globalAlpha = 1;
+    [[S, css("--flax"), "S = " + Math.round(S)], [oh + onord, css("--danger"), "on hand + on order = " + (oh + onord)]].forEach(([v, col, t], i) => { if (v < lo || v > hi) return; x.strokeStyle = col; x.lineWidth = 2; x.beginPath(); x.moveTo(X(v), pad.t); x.lineTo(X(v), h - pad.b); x.stroke(); x.fillStyle = col; x.font = "600 10.5px " + css("--mono"); x.fillText(t, Math.min(X(v) + 4, w - 170), pad.t + 12 + i * 14); });
+    x.lineWidth = 1; x.fillStyle = css("--fg-faint"); x.font = "10.5px " + css("--mono"); x.fillText(Math.round(lo) + " units", pad.l, h - 5); x.fillText(Math.round(hi) + " units", w - pad.r - 60, h - 5);
+    $("tier9").innerHTML = '<span class="tierp ' + tier + '">' + tier + "</span><span>" + (q === 0 ? "No order needed: stock plus inbound already covers the P" + Math.round(svc * 100) + " scenario." : tier === "T0" ? "Auto-approved by the Action Gateway." : tier === "T1" ? "Auto-approved, then sampled by the Auditor." : tier === "T2" ? (spike ? "Anomaly-influenced forecast → Buy Panel must approve." : "Buy Panel must approve.") : "Owner approval required.") + "</span>";
+  }
+
+  // CUSUM
+  let spikeRun = false;
+  async function runSpike() {
+    if (spikeRun) return; spikeRun = true;
+    const r = rng(99), mu = 3, sd = 1.9, k = 0.5, hh = 5, units = [], cus = [];
+    const chain = [...$("chain").children]; chain.forEach((c) => c.classList.remove("lit", "alarm"));
+    let S = 0, alarm = -1;
+    for (let t = 0; t < 40; t++) {
+      const lam = t < 18 ? mu : mu * 3, u = poisson(lam, r), z = (u - mu) / sd;
+      S = Math.max(0, S + z - k); units.push(u); cus.push(S);
+      chain[0].classList.add("lit");
+      if (S > hh && alarm < 0) { alarm = t; chain[1].classList.add("alarm"); }
+      drawCusum(units, cus, alarm, hh);
+      if (alarm >= 0 && t === alarm + 2) chain[2].classList.add("lit");
+      if (alarm >= 0 && t === alarm + 4) chain[3].classList.add("lit");
+      if (alarm >= 0 && t === alarm + 6) chain[4].classList.add("lit");
+      if (alarm >= 0 && t === alarm + 8) chain[5].classList.add("alarm");
+      await sleep(reduce ? 0 : 160);
+    }
+    spikeRun = false;
+  }
+  function drawCusum(units, cus, alarm, hh) {
+    const { x, w, h } = ctx($("c10")), T = 40, pad = { t: 10, r: 10, b: 18, l: 28 }, umax = 16, cmax = Math.max(hh * 2, ...cus) * 1.05;
+    axes(x, w, h, pad, umax);
+    const X = (i) => pad.l + (i / (T - 1)) * (w - pad.l - pad.r), Yu = (v) => pad.t + (h - pad.t - pad.b) * (1 - v / umax), Yc = (v) => pad.t + (h - pad.t - pad.b) * (1 - v / cmax);
+    units.forEach((u, i) => { x.fillStyle = css("--accent"); x.globalAlpha = 0.45; x.fillRect(X(i) - 3, Yu(u), 6, h - pad.b - Yu(u)); x.globalAlpha = 1; });
+    x.strokeStyle = css("--danger"); x.setLineDash([4, 4]); x.beginPath(); x.moveTo(pad.l, Yc(hh)); x.lineTo(w - pad.r, Yc(hh)); x.stroke(); x.setLineDash([]);
+    x.fillStyle = css("--danger"); x.font = "600 10px " + css("--mono"); x.fillText("threshold h", w - pad.r - 70, Yc(hh) - 4);
+    x.strokeStyle = css("--flax"); x.lineWidth = 2; x.beginPath(); cus.forEach((c, i) => x.lineTo(X(i), Yc(c))); x.stroke(); x.lineWidth = 1;
+    if (alarm >= 0) { x.fillStyle = css("--danger"); x.beginPath(); x.arc(X(alarm), Yc(cus[alarm]), 5, 0, 7); x.fill(); x.fillText("ALARM · hour " + alarm, Math.min(X(alarm) + 8, w - 110), Yc(cus[alarm]) + 14); }
+    x.fillStyle = css("--fg-faint"); x.font = "10px " + css("--mono"); x.fillText("units/hour (bars) · CUSUM Sₜ (line)", pad.l, h - 4);
+  }
+
+  // Newsvendor
+  function draw11(p = 1) {
+    const price = +$("nvp").value, cost = Math.min(+$("nvc").value, price - 1), sal = Math.min(+$("nvs").value, cost);
+    $("nvp-v").textContent = "€" + price; $("nvc-v").textContent = "€" + cost; $("nvs-v").textContent = "€" + sal;
+    const Cu = price - cost, Co = cost - sal, CR = Cu / (Cu + Co || 1), r = rng(5), D = [];
+    for (let i = 0; i < 4000; i++) D.push(Math.max(0, 400 + 120 * gauss(r)));
+    D.sort((a, b) => a - b);
+    const Qs = Math.round(D[Math.floor(CR * 3999)]), prof = (Q) => D.reduce((a, d) => a + price * Math.min(d, Q) + sal * Math.max(0, Q - d) - cost * Q, 0) / D.length;
+    const { x, w, h } = ctx($("c11")), pad = { t: 12, r: 12, b: 20, l: 46 }, qs = []; for (let q = 100; q <= 800; q += 10) qs.push([q, prof(q)]);
+    const pmax = Math.max(...qs.map((a) => a[1])), pmin = Math.min(0, ...qs.map((a) => a[1]));
+    const X = (q) => pad.l + ((q - 100) / 700) * (w - pad.l - pad.r), Y = (v) => pad.t + (h - pad.t - pad.b) * (1 - (v - pmin) / (pmax - pmin || 1));
+    x.font = "10.5px " + css("--mono"); x.fillStyle = css("--fg-faint"); x.fillText("€" + Math.round(pmax / 1000) + "k", 4, Y(pmax) + 4); x.fillText("€0", 4, Y(0) + 4);
+    x.strokeStyle = css("--border"); x.beginPath(); x.moveTo(pad.l, Y(0)); x.lineTo(w - pad.r, Y(0)); x.stroke();
+    x.strokeStyle = css("--accent"); x.lineWidth = 2; x.beginPath(); qs.slice(0, Math.ceil(qs.length * p)).forEach(([q, v]) => x.lineTo(X(q), Y(v))); x.stroke(); x.lineWidth = 1;
+    x.strokeStyle = css("--flax"); x.setLineDash([4, 4]); x.beginPath(); x.moveTo(X(Qs), pad.t); x.lineTo(X(Qs), h - pad.b); x.stroke(); x.setLineDash([]);
+    x.fillStyle = css("--flax"); x.font = "600 10.5px " + css("--mono"); x.fillText("Q* = " + Qs, Math.min(X(Qs) + 5, w - 70), pad.t + 10);
+    x.fillStyle = css("--fg-faint"); x.font = "10.5px " + css("--mono"); x.fillText("units bought →", w - pad.r - 90, h - 5); x.fillText("100", pad.l, h - 5);
+    $("n11").innerHTML = "Cu = €" + Cu + ", Co = €" + Co + " → critical ratio <b>" + CR.toFixed(2) + "</b> → buy the <b>P" + Math.round(CR * 100) + "</b> of season demand = <b>" + Qs + " units</b>, expected profit €" + Math.round(prof(Qs)).toLocaleString("en-GB") + ". Lower the outlet value and the optimal buy shrinks.";
+  }
+
+  // ---------------- orchestration ----------------
+  const STAGES = [
+    ["s1", "Data", "Lakehouse", "A year of daily sales lands in the feature store. The shaded windows are stock-outs.", draw1],
+    ["s2", "Censoring", "Feature pipeline", "Stock-out days are masked, so the demand level isn't dragged down by days we simply had nothing to sell.", draw2],
+    ["s3", "Segment", "ML ops", "Each series is placed by how often it sells (ADI) and how variable it is (CV²). The quadrant decides the model family.", draw3],
+    ["s4", "Train", "Azure ML", "Baselines plus the segment's model family are fitted for every product.", null],
+    ["s5", "Backtest", "Promotion gate", "Three rolling origins, 28 days each. The winner must beat seasonal-naive or it isn't published.", null],
+    ["s6", "Reconcile", "MinT", "Children and the collection total are forced to agree, so finance and procurement see the same number.", draw6],
+    ["s7", "Calibrate", "Conformal", "The P10-P90 band is widened or narrowed until it really covers about 80% of outcomes.", draw7],
+    ["s8", "Forecast", "fcst-v18", "The 26-week P10/P50/P90 forecast is published to the Ops Ledger with its version.", draw8],
+    ["s9", "Decide", "Planner → Gateway", "5,000 simulated futures give the order-up-to level; the PO value sets the approval tier.", draw9],
+  ];
+  $("stepper").innerHTML = STAGES.map(([id, t], i) => '<button type="button" data-i="' + i + '"><b>' + String(i + 1).padStart(2, "0") + "</b>" + t + "</button>").join("");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, reduce ? 0 : ms));
+  function animateDraw(fn, ms) {
+    if (!fn) return Promise.resolve();
+    if (reduce) { fn(1); return Promise.resolve(); }
+    return new Promise((res) => { const t0 = performance.now(); (function f(now) { const p = Math.min(1, (now - t0) / ms); fn(p); p < 1 ? requestAnimationFrame(f) : res(); })(t0); });
+  }
+  let playing = false, cur = -1;
+  async function goto(i, animate) {
+    cur = i;
+    document.querySelectorAll(".st").forEach((s) => s.classList.remove("active"));
+    const [id, t, who, text, fn] = STAGES[i];
+    const el = $(id); el.classList.add("active");
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+    [...$("stepper").children].forEach((b, j) => { b.classList.toggle("on", j === i); b.classList.toggle("done", j < i); });
+    $("n-k").textContent = String(i + 1).padStart(2, "0") + " · " + who; $("n-t").textContent = text;
+    if (id === "s4") await (animate ? animateTrain() : Promise.resolve(renderTrain(false)));
+    else if (id === "s5") renderLB();
+    else await (animate ? animateDraw(fn, 1300) : Promise.resolve(fn(1)));
+  }
+  async function tour() {
+    for (let i = cur < 0 || cur >= STAGES.length - 1 ? 0 : cur + 1; i < STAGES.length && playing; i++) { await goto(i, true); await sleep(1700); }
+    if (playing) { setPlay(false); $("n-k").textContent = "Done"; $("n-t").textContent = "Pipeline complete. Now try the spike detector and the newsvendor calculator, or change the product and run again."; }
+  }
+  function setPlay(on) { playing = on; $("play").querySelector("span").textContent = on ? "Pause" : cur >= 0 && cur < STAGES.length - 1 ? "Resume" : "Start"; $("play").querySelector("svg").innerHTML = on ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4v16l13-8z"/>'; if (on) tour(); }
+  $("play").addEventListener("click", () => setPlay(!playing));
+  $("stepper").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; setPlay(false); goto(+b.dataset.i, true); });
+
+  function all() { recompute(); draw1(); draw2(); draw3(); renderTrain(false); renderLB(); draw6(); draw7(); draw8(); draw9(); draw11(); drawCusum([], [], -1, 5); }
+  $("skus").innerHTML = SKUS.map((s) => '<button type="button" data-id="' + s.id + '" aria-pressed="' + (s === sel) + '">' + s.name.replace("Étoile ", "") + "</button>").join("");
+  $("skus").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; sel = SKUS.find((s) => s.id === b.dataset.id); [...$("skus").children].forEach((x) => x.setAttribute("aria-pressed", String(x === b))); all(); });
+  $("cens").addEventListener("change", (e) => { censor = e.target.checked; all(); });
+  ["svc", "ltp", "oh", "spk"].forEach((id) => $(id).addEventListener("input", () => draw9()));
+  ["nvp", "nvc", "nvs"].forEach((id) => $(id).addEventListener("input", () => draw11()));
+  $("spike").addEventListener("click", runSpike);
+  window.addEventListener("resize", () => all());
+  document.addEventListener("themechange", () => all());
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(all);
+  all();
+})();
+</script>
+</body>
+</html>

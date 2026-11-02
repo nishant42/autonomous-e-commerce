@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Identity, Secrets & Runtime</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><div class="content">
+
+<div class="eyebrow">Deep dive C · Identity, secrets and runtime</div>
+<h1>Every agent is a principal. No agent holds a secret.</h1>
+<p class="lede">In an autonomous company, the "employees" are software. They need the same things human staff need: an identity, least-privilege access, credentials that expire, and an audit trail of who did what. This page covers agent identity, token exchange (including on-behalf-of), runtime secret resolution, and how the harness reaches Azure AI Foundry without API keys.</p>
+
+<h2 id="azure">Azure architecture</h2>
+<div class="diagram arch-wrap"><div class="arch-view"><svg class="arch" viewBox="0 0 1200 810" role="img" aria-label="Azure architecture from Entra ID to Foundry" style="min-width:760px"><defs><marker id="ah-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahp" d="M0 0L10 5L0 10z"/></marker><marker id="ahb-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahb" d="M0 0L10 5L0 10z"/></marker></defs><rect class="box ext" x="40" y="16" width="120" height="44" rx="10"/><text class="t" x="52" y="43.0">Owner</text><rect class="zone " x="20" y="76" width="1160" height="104" rx="14"/><rect class="box " x="40" y="110" width="260" height="52" rx="10"/><text class="t" x="52" y="132">Owner accounts</text><text class="s" x="52" y="150">MFA, Conditional Access</text><rect class="box " x="320" y="110" width="300" height="52" rx="10"/><text class="t" x="332" y="132">App registrations</text><text class="s" x="332" y="150">console front end + API (for OBO)</text><rect class="box " x="640" y="110" width="300" height="52" rx="10"/><text class="t" x="652" y="132">Managed identities</text><text class="s" x="652" y="150">one per agent, gateway, adapter</text><rect class="box ext" x="960" y="110" width="200" height="52" rx="10"/><text class="t" x="972" y="132">Sign-in logs</text><text class="s" x="972" y="150">who did what, when</text><rect class="zone " x="20" y="200" width="1160" height="590" rx="14"/><rect class="zone inner" x="40" y="236" width="580" height="230" rx="14"/><rect class="box " x="60" y="276" width="180" height="60" rx="10"/><text class="t" x="72" y="298">Owner console</text><text class="s" x="72" y="316">approvals, kill switch</text><rect class="box warn" x="260" y="276" width="180" height="60" rx="10"/><text class="t" x="272" y="298">Action Gateway</text><text class="s" x="272" y="316">OPA policy · limits</text><rect class="box " x="460" y="276" width="140" height="60" rx="10"/><text class="t" x="472" y="298">Adapters</text><text class="s" x="472" y="316">Shopify · Stripe · EDI</text><rect class="box ext" x="60" y="380" width="180" height="60" rx="10"/><text class="t" x="72" y="402">Portal jobs</text><text class="s" x="72" y="420">isolated subnet</text><rect class="box " x="460" y="380" width="140" height="60" rx="10"/><text class="t" x="472" y="402">Agent harness</text><text class="s" x="472" y="420">all agents run here</text><rect class="box " x="680" y="276" width="180" height="60" rx="10"/><text class="t" x="692" y="298">API Management</text><text class="s" x="692" y="316">AI gateway + webhooks</text><rect class="zone inner" x="900" y="236" width="260" height="230" rx="14"/><rect class="box " x="920" y="276" width="220" height="52" rx="10"/><text class="t" x="932" y="298">Foundry Agent Service</text><text class="s" x="932" y="316">threads, tools, tracing</text><rect class="box " x="920" y="344" width="220" height="52" rx="10"/><text class="t" x="932" y="366">Model deployments</text><text class="s" x="932" y="384">small · mid · frontier · judge</text><rect class="box ext" x="920" y="406" width="105" height="44" rx="10"/><text class="t" x="932" y="433.0">Content Safety</text><rect class="box ext" x="1035" y="406" width="105" height="44" rx="10"/><text class="t" x="1047" y="433.0">Evaluations</text><rect class="zone inner" x="40" y="496" width="580" height="190" rx="14"/><rect class="box " x="60" y="536" width="180" height="56" rx="10"/><text class="t" x="72" y="558">Service Bus</text><text class="s" x="72" y="576">events, DLQ</text><rect class="box ok" x="260" y="536" width="180" height="56" rx="10"/><text class="t" x="272" y="558">PostgreSQL</text><text class="s" x="272" y="576">Ops Ledger, Entra login</text><rect class="box " x="460" y="536" width="140" height="56" rx="10"/><text class="t" x="472" y="558">AI Search</text><text class="s" x="472" y="576">policies, contracts</text><rect class="box " x="60" y="612" width="180" height="56" rx="10"/><text class="t" x="72" y="634">Redis</text><text class="s" x="72" y="652">spend counters</text><rect class="box " x="260" y="612" width="180" height="56" rx="10"/><text class="t" x="272" y="634">Document Intelligence</text><text class="s" x="272" y="652">supplier PDFs</text><rect class="box " x="460" y="612" width="140" height="56" rx="10"/><text class="t" x="472" y="634">Azure ML</text><text class="s" x="472" y="652">forecast, fraud</text><rect class="box warn" x="680" y="550" width="180" height="56" rx="10"/><text class="t" x="692" y="572">Key Vault</text><text class="s" x="692" y="590">vendor secrets only</text><rect class="box ext" x="900" y="550" width="260" height="56" rx="10"/><text class="t" x="912" y="572">Azure Monitor · Sentinel</text><text class="s" x="912" y="590">traces, logs, security alerts</text><rect class="band" x="40" y="720" width="1120" height="50" rx="8"/><text class="t" x="56" y="743">Outside Azure</text><text class="s" x="56" y="760">Temporal Cloud (private link) · Shopify · Stripe · 3PL · EDI provider · supplier mailboxes and portals</text><path class="ln " d="M100,60 L100,110" marker-end="url(#ah-a)"/><g class="num"><circle cx="124" cy="68" r="11"/><text x="124" y="72" text-anchor="middle">1</text></g><path class="ln " d="M150,162 L150,276" marker-end="url(#ah-a)"/><g class="num"><circle cx="132" cy="171" r="11"/><text x="132" y="175" text-anchor="middle">2</text></g><path class="ln " d="M240,306 L260,306" marker-end="url(#ah-a)"/><g class="num"><circle cx="250" cy="350" r="11"/><text x="250" y="354" text-anchor="middle">3</text></g><text class="lbl" x="232" y="376">OBO</text><path class="ln " d="M470,380 L430,336" marker-end="url(#ah-a)"/><g class="num"><circle cx="470" cy="362" r="11"/><text x="470" y="366" text-anchor="middle">4</text></g><path class="ln " d="M600,410 L660,410 L660,316 L680,316" marker-end="url(#ah-a)"/><g class="num"><circle cx="672" cy="380" r="11"/><text x="672" y="384" text-anchor="middle">5</text></g><path class="ln " d="M860,302 L920,302" marker-end="url(#ah-a)"/><g class="num"><circle cx="890" cy="288" r="11"/><text x="890" y="292" text-anchor="middle">6</text></g><path class="ln " d="M1030,328 L1030,344" marker-end="url(#ah-a)"/><path class="ln " d="M440,306 L460,306" marker-end="url(#ah-a)"/><path class="ln " d="M350,336 L350,536" marker-end="url(#ah-a)"/><text class="lbl" x="358" y="486">Entra token as password</text><g class="num"><circle cx="338" cy="470" r="11"/><text x="338" y="474" text-anchor="middle">7</text></g><path class="ln dash" d="M600,300 L640,300 L640,578 L680,578" marker-end="url(#ah-a)"/><g class="num"><circle cx="640" cy="520" r="11"/><text x="640" y="524" text-anchor="middle">8</text></g><path class="ln " d="M530,440 L530,536" marker-end="url(#ah-a)"/><text class="lbl" x="538" y="486">RAG, ML, OCR</text><path class="ln " d="M260,564 L240,564" marker-end="url(#ah-a)"/><path class="ln dash" d="M870,720 L870,332 L860,332" marker-end="url(#ah-a)"/><text class="lbl" x="878" y="680">webhooks in</text><path class="ln dash" d="M1030,466 L1030,550" marker-end="url(#ah-a)"/><text class="lbl" x="1038" y="512">traces</text><path class="ln dash" d="M790,162 L790,236" marker-end="url(#ah-a)"/><text class="lbl" x="798" y="205">tokens</text><text class="zone-t" x="34" y="98">Microsoft Entra ID</text><text class="zone-t" x="34" y="222">Azure subscription · UK South (DR: West Europe) · private network, firewall egress</text><text class="zone-t" x="54" y="258">Container Apps environment</text><text class="zone-t" x="914" y="258">Azure AI Foundry project</text><text class="zone-t" x="54" y="518">Data and AI services</text></svg></div></div>
+<p class="caption">Azure architecture. Numbers follow one request: an owner signing in, and an agent calling a Foundry model.</p>
+<div class="table-wrap"><table>
+<tr><th>#</th><th>Step</th></tr>
+<tr><td>1</td><td>An owner signs in with Entra ID, with MFA and Conditional Access.</td></tr>
+<tr><td>2</td><td>The owner console receives the owner's token.</td></tr>
+<tr><td>3</td><td>For an approval, the console exchanges that token on behalf of the owner (OBO), so the audit log names the person, not the app.</td></tr>
+<tr><td>4</td><td>An agent's decision goes from the harness to the Action Gateway as a proposal. Every service gets its tokens from its own managed identity, so there are no passwords in code.</td></tr>
+<tr><td>5</td><td>The harness calls a model through API Management, which checks quotas and content safety.</td></tr>
+<tr><td>6</td><td>API Management calls the Foundry agent and model with its own identity. No API keys anywhere.</td></tr>
+<tr><td>7</td><td>The gateway writes to PostgreSQL using a short-lived Entra token as its password.</td></tr>
+<tr><td>8</td><td>Adapters fetch only their own vendor secret from Key Vault, at the moment they need it.</td></tr>
+</table></div>
+
+<h2>Identity model</h2>
+<div class="table-wrap"><table>
+<tr><th>Principal</th><th>Identity</th><th>Gets tokens for</th><th>Never gets</th></tr>
+<tr><td>Each agent (e.g. <code>procurement-agent</code>)</td><td>Its own Entra workload identity (managed identity or agent identity where available)</td><td>Read tools in its domain; the Action Gateway (<code>proposals.write</code>); its model deployment via the AI gateway</td><td>Vendor credentials, other domains' write scopes, database superuser</td></tr>
+<tr><td>Action Gateway</td><td>Managed identity</td><td>Ledger writes; Key Vault secrets for adapters it invokes</td><td>Model endpoints (it doesn't think)</td></tr>
+<tr><td>Adapters</td><td>One managed identity per external system</td><td>Only their own vendor secret in Key Vault</td><td>Other adapters' secrets</td></tr>
+<tr><td>Verifier / panel agents</td><td>Separate identities from makers</td><td><code>verdicts.write</code></td><td><code>proposals.write</code> (they cannot act, only judge)</td></tr>
+<tr><td>Owners (humans)</td><td>Entra users with MFA and conditional access</td><td>Console; T3 approvals via delegated (OBO) tokens</td><td>Direct database write access</td></tr>
+</table></div>
+
+<h2>Runtime secret and token flow</h2>
+<p>Configuration is resolved <strong>at runtime</strong>, not baked into builds. Global bootstrap settings come from the environment. Everything sensitive is fetched by identity from the secret store, validated against a strict schema, and cached briefly.</p>
+<div class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant WF as Workflow activity
+  participant H as Harness (agent MI)
+  participant E as Entra ID
+  participant KV as Key Vault
+  participant AIG as AI Gateway (APIM)
+  participant F as Foundry model deployment
+  participant AG as Action Gateway (MI)
+  participant AD as Supplier adapter (MI)
+  participant S as Supplier API / EDI / mailbox
+  WF->>H: run(procurement-agent, task)
+  H->>E: token for AI gateway (managed identity)
+  E-->>H: access token (≈1h, cached, refreshed early)
+  H->>AIG: model call + bearer token
+  AIG->>AIG: validate token · per-agent quota · content safety
+  AIG->>F: call via gateway's own managed identity (no API keys)
+  F-->>H: tool calls / output
+  H->>AG: ActionProposal + agent token (aud = gateway)
+  AG->>AG: authorise: token subject == proposal.agent.identity
+  AG->>AD: execute(command)
+  AD->>KV: get secret (adapter MI, one secret path only)
+  KV-->>AD: EDI / API credential (in-memory, short TTL)
+  AD->>S: authenticated call
+  Note over H,F: Secrets never enter model context, prompts, traces or logs
+</script>
+</div>
+
+<h2>On-behalf-of (OBO) and delegated access</h2>
+<div class="grid g2">
+  <div class="card"><h4>Where OBO is used</h4>
+    <ul>
+      <li><strong>Human exception approvals (T3).</strong> An owner signs in to the console. The console backend exchanges the owner's token for a downstream token (OAuth 2.0 on-behalf-of). The Action Gateway and Ledger then see the <em>owner's</em> identity, so the audit trail says "approved by owner X", not "approved by the console service".</li>
+      <li><strong>Database access as the caller.</strong> Postgres uses Entra authentication, with a short-lived access token as the password. Row-level security policies key off that identity, so a console user sees only what their role allows.</li>
+    </ul>
+  </div>
+  <div class="card"><h4>Where it is not</h4>
+    <ul>
+      <li><strong>Autonomous agents</strong> act as <em>themselves</em>, with their own workload identity. They are not on behalf of any person. Pretending an autonomous action was taken by a human would corrupt the audit trail.</li>
+      <li>When one agent delegates to a sub-agent, the sub-agent gets a <strong>narrowed token</strong> via token exchange: same case, fewer scopes, shorter lifetime. It never inherits the parent's full rights.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Operational rules that make this production-safe</h2>
+<div class="table-wrap"><table>
+<tr><th>Rule</th><th>Why</th></tr>
+<tr><td><strong>Strict config schemas, fail closed.</strong> Secret bundles are validated at load, and unknown keys are rejected so typos are caught. Conditional rules apply, e.g. if any adapter credential is present, all the required ones must be.</td><td>A half-configured adapter that "sort of works" is worse than one that refuses to start.</td></tr>
+<tr><td><strong>Short-TTL caches with in-flight deduplication.</strong> Tokens and secrets are cached (minutes), refreshed before expiry, and concurrent requests share one fetch.</td><td>Stops token storms at scale; removes secret-store latency from the hot path.</td></tr>
+<tr><td><strong>Expired-token handling breaks loops.</strong> Specific expiry errors clear the cache and force a fresh acquisition. Repeated failure opens a circuit, not an infinite retry.</td><td>A classic production failure is a redirect or retry loop on an expired assertion.</td></tr>
+<tr><td><strong>Separate identities per environment.</strong> Preview and staging environments get their own identities, database and model deployments.</td><td>A staging agent can never touch production suppliers.</td></tr>
+<tr><td><strong>Long jobs refresh credentials mid-flight.</strong> Batch jobs such as backfills and training re-acquire tokens between stages.</td><td>A multi-hour job must not fail at minute 61 because a token expired.</td></tr>
+<tr><td><strong>No tokens in logs.</strong> Log which identity called what, with latency, never the token itself.</td><td>Traces are widely readable; tokens are bearer credentials.</td></tr>
+<tr><td><strong>Private networking.</strong> Private endpoints for Key Vault, Postgres, Service Bus and Foundry. Egress allow-list per adapter.</td><td>Stolen credentials are useless from outside the network boundary.</td></tr>
+</table></div>
+
+<h2>Secret layout (per environment)</h2>
+<pre><code>/prod/
+  gateway/               # nothing model-facing lives here
+  adapters/
+    shopify/   ADMIN_API_TOKEN, WEBHOOK_SECRET
+    stripe/    RESTRICTED_KEY (refunds + read only), WEBHOOK_SECRET
+    edi/       PROVIDER_API_KEY, AS2_CERT_REF
+    supplier-portals/
+      sup_yd/  PORTAL_USER, PORTAL_PASSWORD_REF, TOTP_SEED_REF   # RPA only, isolated worker
+    mailbox/   GRAPH_APP_ID (certificate-based, no password)
+    tpl/       API_KEY, WEBHOOK_SECRET
+  models/
+    GATEWAY_URL                                               # managed identity, no keys stored
+  ledger-database/
+    HOST, DATABASE                                            # Entra token login, no password stored</code></pre>
+<p class="muted">Restricted keys are used wherever vendors support them. For example, the Stripe key used by the refund adapter can create refunds and read charges, but cannot create payouts.</p>
+
+</div></main>
+</body>
+</html>
