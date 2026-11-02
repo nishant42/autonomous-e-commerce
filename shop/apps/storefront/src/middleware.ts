@@ -10,7 +10,7 @@ const regionMapCache = {
   regionMapUpdated: Date.now(),
 }
 
-async function getRegionMap(cacheId: string) {
+async function getRegionMap() {
   const { regionMap, regionMapUpdated } = regionMapCache
 
   if (!BACKEND_URL) {
@@ -29,11 +29,9 @@ async function getRegionMap(cacheId: string) {
       headers: {
         "x-publishable-api-key": PUBLISHABLE_API_KEY!,
       },
-      next: {
-        revalidate: 3600,
-        tags: [`regions-${cacheId}`],
-      },
-      cache: "force-cache",
+      // Cache successful region maps in memory, never a temporary 502 response.
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
     })
 
     if (!response.ok) {
@@ -95,7 +93,16 @@ export async function middleware(request: NextRequest) {
   const cacheIdCookie = request.cookies.get("_medusa_cache_id")
   const cacheId = cacheIdCookie?.value || crypto.randomUUID()
 
-  const regionMap = await getRegionMap(cacheId)
+  let regionMap: Map<string, HttpTypes.StoreRegion>
+  try {
+    regionMap = await getRegionMap()
+  } catch (error) {
+    console.error("Store backend unavailable:", error instanceof Error ? error.message : "request failed")
+    return new NextResponse(
+      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="15"><title>Connecting to the shop</title></head><body style="margin:0;background:#f7f7f5;color:#202522;font-family:system-ui,sans-serif"><main style="max-width:560px;margin:12vh auto;padding:32px"><p>HALDEN SHOP</p><h1>Connecting to the shop</h1><p>The shop backend is temporarily unavailable. On this free demo it may need a few minutes to wake up after being idle.</p><p>This page checks again every 15 seconds. Your cart is not changed.</p><p><a href="">Try again now</a></p></main></body></html>`,
+      { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Retry-After": "15" } }
+    )
+  }
   const countryCode = await getCountryCode(request, regionMap)
 
   // if the country code is available, use it, otherwise use the default region
