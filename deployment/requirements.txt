@@ -1,0 +1,6 @@
+# Optional numerical models; no local LLM or transformer downloads at startup.
+numpy==1.26.4
+pandas==2.2.3
+scipy==1.14.1
+scikit-learn==1.5.2
+statsmodels==0.14.4

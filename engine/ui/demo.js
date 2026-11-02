@@ -7,8 +7,21 @@
   const names = {reorder:'Reorder',marketing_allocator:'Marketing',product_verdict:'Product verdict'};
   let data, agent='reorder', variant='v_black', ad='google_pmax', product, rules=[], replayTimer, replayIndex=0;
   // Keep the storefront on the origin used by its Next.js development server.
-  const shopURL = 'http://localhost:8000/dk/store';
-  el('shop-frame').src=shopURL;el('open-shop').href=shopURL;
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+  function setShop(url) {
+    el('shop-frame').src=url;el('open-shop').href=url;
+  }
+  if (local) setShop('http://localhost:8000/dk/store');
+  else fetch('/api/public-config').then(r => {
+    if (!r.ok) throw new Error('Shop configuration unavailable');
+    return r.json();
+  }).then(config => {
+    if (new URL(config.shop_url).protocol !== 'https:') throw new Error('HTTPS required');
+    setShop(config.shop_url);
+  }).catch(() => {
+    el('open-shop').textContent='Shop connection unavailable';
+    el('open-shop').removeAttribute('href');
+  });
   async function api(url,body) {
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
     try {
