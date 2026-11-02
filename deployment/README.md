@@ -8,15 +8,21 @@ checks. Do not expose a tunnel from the developer's laptop as permanent hosting.
 
 ## Infrastructure
 
-`render.yaml` proposes three paid services and managed PostgreSQL:
+`render.yaml` now uses only free plans, as requested:
 
-- Medusa backend: Standard (2 GB RAM), persistent managed PostgreSQL.
-- Next.js storefront: Starter, public storefront and test checkout.
-- Python agents: Starter, persistent SQLite disk, authenticated console.
+- Medusa backend, Next.js storefront and Python agents: Free (512 MB each).
+- PostgreSQL: Free, 1 GB, expires 30 days after creation.
+- No persistent disk. Agent SQLite history resets when its service sleeps,
+  restarts or redeploys; the shop database survives until its expiry.
 
-Review the quoted recurring cost in Render before applying. This is not a free
-configuration. The Cloudflare free account cannot run the current application as
-containers, and ephemeral container disk is not a safe substitute for the database.
+Free web services sleep after 15 idle minutes and share 750 instance-hours per
+workspace per month. Cold starts can take about a minute. These limits make this
+a temporary recruiter demo, not an always-on production installation. Medusa may
+exceed the free service's memory; do not upgrade it without user approval. Keep
+build/bandwidth usage within the included quota and do not enable paid overages.
+
+The authenticated wrapper and source are prepared. Live status must be verified
+for each service before sharing links with a recruiter.
 
 ## Provision in stages
 
@@ -27,7 +33,7 @@ containers, and ephemeral container disk is not a safe substitute for the databa
 2. Set CORS to exact HTTPS origins: STORE_CORS to the storefront origin;
    ADMIN_CORS to the backend origin; AUTH_CORS to both, comma-separated. Initially
    the backend origin can be used while provisioning; update before testing the shop.
-3. Backend startup runs migrations. In its Render Shell, create an administrator:
+3. Backend startup runs migrations. Free services have no Render Shell. A deployment bootstrap must create the administrator before the first shop demo; on paid services, the manual command would be:
    `cd shop/apps/backend/.medusa/server` then
    `../../../../node_modules/.bin/medusa user -e YOUR_EMAIL -p YOUR_PASSWORD`.
    Choose a unique password; do not use the local demo password.
@@ -61,7 +67,7 @@ Default LLM provider is explicitly rules_only. Numerical ML packages are include
 but Ridge must be trained/promoted on the hosted dataset before claiming it is in
 use. Existing local pickle files are not copied across library versions. Model
 artifacts currently live under engine/models and must be retrained after redeploy;
-only the SQLite evidence/ledger is on the persistent disk. DistilBERT/Qwen/Chronos
+SQLite evidence/ledger and model files are both ephemeral on this free setup. DistilBERT/Qwen/Chronos
 are not downloaded automatically on small instances. Enabling them requires
 appropriate memory and explicit dependency/model setup.
 

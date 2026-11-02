@@ -1,9 +1,9 @@
-# Paid, persistent recruiter deployment. Review Render's quote before applying.
+# Free recruiter demo. Database expires after 30 days; agent state is ephemeral.
 # Configure the backend first, then the storefront and engine (see deployment/README.md).
 databases:
   - name: halden-db
     region: frankfurt
-    plan: basic-256mb
+    plan: free
     databaseName: halden
     user: halden
     ipAllowList: []
@@ -12,7 +12,7 @@ services:
     name: halden-backend
     runtime: node
     region: frankfurt
-    plan: standard
+    plan: free
     buildCommand: cd shop && npm ci --include=dev && npm run build --workspace=@dtc/backend
     startCommand: sh deployment/start-backend.sh
     healthCheckPath: /health
@@ -29,6 +29,10 @@ services:
         generateValue: true
       - key: COOKIE_SECRET
         generateValue: true
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        generateValue: true
       - key: STORE_CORS
         sync: false
       - key: ADMIN_CORS
@@ -39,7 +43,7 @@ services:
     name: halden-storefront
     runtime: node
     region: frankfurt
-    plan: starter
+    plan: free
     buildCommand: cd shop && npm ci --include=dev && npm run build --workspace=@dtc/storefront
     startCommand: sh deployment/start-storefront.sh
     healthCheckPath: /dk/store
@@ -60,19 +64,15 @@ services:
     name: halden-agents
     runtime: python
     region: frankfurt
-    plan: starter
+    plan: free
     buildCommand: pip install -r deployment/requirements.txt
     startCommand: python deployment/serve.py
     healthCheckPath: /healthz
-    disk:
-      name: engine-state
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: ENGINE_DB
-        value: /var/data/engine.db
+        value: /tmp/halden/engine.db
       - key: ENGINE_MODEL_PROVIDER
         value: rules_only
       - key: OMP_NUM_THREADS
